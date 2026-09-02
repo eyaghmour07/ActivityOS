@@ -183,6 +183,161 @@ bool setLaunchAtLogin(bool enabled) {
 #endif
 }
 
+QString friendlyStyleSheet(const QPalette& palette) {
+    const bool dark = palette.color(QPalette::Window).lightness() < 128;
+    const QString background = dark ? "#111318" : "#f5f7fb";
+    const QString surface = dark ? "#191c23" : "#ffffff";
+    const QString surfaceAlt = dark ? "#20242d" : "#eef2f7";
+    const QString border = dark ? "#343a48" : "#dbe1ea";
+    const QString text = dark ? "#f4f6fb" : "#172033";
+    const QString muted = dark ? "#aeb7c7" : "#667085";
+    const QString accent = dark ? "#8aa4ff" : "#4f6ef7";
+    const QString accentSoft = dark ? "#252d43" : "#e7ecff";
+    const QString selection = dark ? "#303b59" : "#dce4ff";
+
+    QString style = R"(
+        * { color: @TEXT; }
+        QMainWindow, QWidget, QDialog { background: @BG; color: @TEXT; }
+        #sidebar { background: @SURFACE; border-right: 1px solid @BORDER; }
+        #brand { font-size: 23px; font-weight: 700; color: @ACCENT; padding-left: 8px; }
+        #tagline { font-size: 12px; color: @MUTED; padding-left: 8px; }
+        #localBadge {
+            background: @SURFACE_ALT;
+            border: 1px solid @BORDER;
+            border-radius: 9px;
+            padding: 9px;
+            font-size: 12px;
+            color: @MUTED;
+        }
+        #navigation { border: 0; background: transparent; outline: 0; }
+        #navigation::item {
+            color: @TEXT;
+            min-height: 25px;
+            padding: 9px 13px;
+            margin: 2px 0;
+            border-radius: 8px;
+        }
+        #navigation::item:hover { background: @SURFACE_ALT; color: @TEXT; }
+        #navigation::item:selected {
+            background: @ACCENT_SOFT;
+            color: @TEXT;
+            border-left: 3px solid @ACCENT;
+            font-weight: 650;
+        }
+        #pageTitle { color: @TEXT; }
+        #trackingPill {
+            color: @TEXT;
+            background: @SURFACE_ALT;
+            border: 1px solid @BORDER;
+            border-radius: 10px;
+            padding: 7px 11px;
+            font-weight: 650;
+        }
+        #activeApp { color: @MUTED; font-size: 13px; }
+        #metricCard {
+            color: @TEXT;
+            background: @SURFACE;
+            border: 1px solid @BORDER;
+            border-radius: 12px;
+        }
+        #metricCard:hover { border: 1px solid @ACCENT; }
+        #metricCaption { color: @MUTED; font-size: 12px; font-weight: 600; }
+        #metricValue { color: @TEXT; font-size: 25px; font-weight: 700; }
+        QPushButton {
+            color: @TEXT;
+            background: @SURFACE_ALT;
+            border: 1px solid @BORDER;
+            border-radius: 8px;
+            padding: 8px 14px;
+            font-weight: 600;
+        }
+        QPushButton:hover { color: @TEXT; border-color: @ACCENT; background: @ACCENT_SOFT; }
+        QPushButton:pressed { color: @TEXT; background: @SELECTION; }
+        QPushButton:disabled { color: @MUTED; border-color: @BORDER; }
+        QTableWidget, QListWidget {
+            color: @TEXT;
+            background: @SURFACE;
+            alternate-background-color: @SURFACE_ALT;
+            border: 1px solid @BORDER;
+            border-radius: 10px;
+            padding: 2px;
+            outline: 0;
+        }
+        QTableWidget::item, QListWidget::item { color: @TEXT; }
+        QTableWidget::item:selected, QListWidget::item:selected {
+            color: @TEXT;
+            background: @SELECTION;
+        }
+        #insightList { padding: 6px; }
+        #insightList::item {
+            color: @TEXT;
+            background: @SURFACE_ALT;
+            border-radius: 8px;
+            margin: 4px;
+            padding: 12px;
+        }
+        #insightList::item:selected { color: @TEXT; background: @SELECTION; }
+        QHeaderView::section {
+            color: @TEXT;
+            background: @SURFACE_ALT;
+            border: 0;
+            border-bottom: 1px solid @BORDER;
+            padding: 8px;
+            font-weight: 650;
+        }
+        QLineEdit, QTextEdit, QPlainTextEdit, QSpinBox, QDoubleSpinBox, QComboBox {
+            color: @TEXT;
+            background: @SURFACE;
+            selection-color: @TEXT;
+            selection-background-color: @SELECTION;
+            border: 1px solid @BORDER;
+            border-radius: 7px;
+            padding: 7px;
+        }
+        QComboBox QAbstractItemView {
+            color: @TEXT;
+            background: @SURFACE;
+            selection-color: @TEXT;
+            selection-background-color: @SELECTION;
+            border: 1px solid @BORDER;
+        }
+        QCheckBox { color: @TEXT; spacing: 8px; }
+        QMenu {
+            color: @TEXT;
+            background: @SURFACE;
+            border: 1px solid @BORDER;
+            padding: 5px;
+        }
+        QMenu::item { color: @TEXT; padding: 7px 22px; border-radius: 5px; }
+        QMenu::item:selected { color: @TEXT; background: @SELECTION; }
+        QToolTip {
+            color: @TEXT;
+            background: @SURFACE_ALT;
+            border: 1px solid @BORDER;
+            padding: 5px;
+        }
+        QMessageBox QLabel { color: @TEXT; background: transparent; }
+        QStatusBar { color: @MUTED; background: @SURFACE; border-top: 1px solid @BORDER; }
+        QScrollBar:vertical { background: transparent; width: 10px; margin: 2px; }
+        QScrollBar::handle:vertical {
+            background: @BORDER;
+            min-height: 28px;
+            border-radius: 4px;
+        }
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+    )";
+    style.replace("@ACCENT_SOFT", accentSoft);
+    style.replace("@SURFACE_ALT", surfaceAlt);
+    style.replace("@SELECTION", selection);
+    style.replace("@SURFACE", surface);
+    style.replace("@BORDER", border);
+    style.replace("@ACCENT", accent);
+    style.replace("@MUTED", muted);
+    style.replace("@TEXT", text);
+    style.replace("@BG", background);
+    return style;
+}
+
 } // namespace
 
 MainWindow::MainWindow(storage::Database& database, QWidget* parent)
@@ -263,93 +418,7 @@ void MainWindow::buildShell() {
     shell->addWidget(sidebar);
     shell->addWidget(pages_, 1);
     setCentralWidget(central);
-    setStyleSheet(R"(
-        QMainWindow, QWidget { background: palette(window); color: palette(window-text); }
-        #sidebar { background: palette(base); border-right: 1px solid palette(midlight); }
-        #brand { font-size: 23px; font-weight: 750; color: palette(highlight); padding-left: 8px; }
-        #tagline { font-size: 12px; color: palette(mid); padding-left: 8px; }
-        #localBadge {
-            background: palette(alternate-base);
-            border: 1px solid palette(midlight);
-            border-radius: 9px;
-            padding: 9px;
-            font-size: 12px;
-            color: palette(mid);
-        }
-        #navigation { border: 0; background: transparent; outline: 0; }
-        #navigation::item {
-            min-height: 25px;
-            padding: 9px 13px;
-            margin: 2px 0;
-            border-radius: 8px;
-        }
-        #navigation::item:hover { background: palette(alternate-base); }
-        #navigation::item:selected {
-            background: palette(highlight);
-            color: palette(highlighted-text);
-            font-weight: 650;
-        }
-        #pageTitle { letter-spacing: -0.4px; }
-        #trackingPill {
-            background: palette(alternate-base);
-            border: 1px solid palette(midlight);
-            border-radius: 10px;
-            padding: 7px 11px;
-            font-weight: 650;
-        }
-        #activeApp { color: palette(mid); font-size: 13px; }
-        #metricCard {
-            background: palette(base);
-            border: 1px solid palette(midlight);
-            border-radius: 12px;
-        }
-        #metricCard:hover { border: 1px solid palette(highlight); }
-        #metricCaption { color: palette(mid); font-size: 12px; font-weight: 600; }
-        #metricValue { font-size: 25px; font-weight: 750; }
-        QPushButton {
-            background: palette(button);
-            border: 1px solid palette(midlight);
-            border-radius: 8px;
-            padding: 8px 14px;
-            font-weight: 600;
-        }
-        QPushButton:hover { border-color: palette(highlight); }
-        QPushButton:pressed { background: palette(alternate-base); }
-        QTableWidget {
-            background: palette(base);
-            alternate-background-color: palette(alternate-base);
-            border: 1px solid palette(midlight);
-            border-radius: 10px;
-            padding: 2px;
-        }
-        #insightList {
-            background: palette(base);
-            border: 1px solid palette(midlight);
-            border-radius: 10px;
-            outline: 0;
-            padding: 6px;
-        }
-        #insightList::item {
-            background: palette(alternate-base);
-            border-radius: 8px;
-            margin: 4px;
-            padding: 12px;
-        }
-        QHeaderView::section {
-            background: palette(alternate-base);
-            border: 0;
-            border-bottom: 1px solid palette(midlight);
-            padding: 8px;
-            font-weight: 650;
-        }
-        QLineEdit, QSpinBox, QComboBox {
-            background: palette(base);
-            border: 1px solid palette(midlight);
-            border-radius: 7px;
-            padding: 7px;
-        }
-        QStatusBar { border-top: 1px solid palette(midlight); color: palette(mid); }
-    )");
+    qApp->setStyleSheet(friendlyStyleSheet(qApp->palette()));
     statusBar()->showMessage("Everything stays on this device");
 }
 
