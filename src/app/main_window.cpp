@@ -619,7 +619,7 @@ QWidget* MainWindow::buildRulesPage() {
     auto* container = page("Application Rules", layout);
     auto* browserHelp = new QLabel(
         "Browser tabs are classified from their visible title without storing the title. "
-        "Study and developer sites count as Research; common streaming sites count as "
+        "Study, developer, and AI-assistant sites count as Research; common streaming sites count as "
         "Entertainment. Add a rule below whenever your use differs.");
     browserHelp->setObjectName("activeApp");
     browserHelp->setWordWrap(true);

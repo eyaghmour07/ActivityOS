@@ -27,9 +27,13 @@ std::pair<std::string, bool> defaultClassification(const std::string& applicatio
             return app.find(name) != std::string::npos;
         });
     };
-    if (containsAny({"visual studio code", "vscode", "xcode", "terminal", "iterm",
+    if (containsAny({"cursor", "visual studio code", "vscode", "xcode", "terminal", "iterm",
                      "visual studio", "intellij", "clion", "pycharm", "android studio"})) {
         return {"Coding", false};
+    }
+    if (containsAny({"chatgpt", "claude", "gemini", "perplexity",
+                     "microsoft copilot", "github copilot", "poe"})) {
+        return {"Research", false};
     }
     if (containsAny({"slack", "discord", "teams", "zoom", "mail", "messages"})) {
         return {"Communication", false};
@@ -73,7 +77,8 @@ std::optional<std::pair<std::string, bool>> browserTitleClassification(
                      "mdn web docs", "developer.mozilla", "leetcode", "hackerrank",
                      "codeforces", "coursera", "khan academy", "blackboard",
                      "canvas student", "canvas dashboard", "edx", "overleaf",
-                     "google docs", "google sheets", "notion"})) {
+                     "google docs", "google sheets", "notion", "chatgpt", "claude",
+                     "gemini", "perplexity", "copilot", "poe"})) {
         return std::pair<std::string, bool>{"Research", false};
     }
     return std::nullopt;

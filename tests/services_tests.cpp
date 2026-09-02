@@ -76,6 +76,21 @@ int main() {
 
     storage::Database browserDatabase = storage::Database::inMemory();
     browserDatabase.migrate();
+    auto assistantSource = std::make_unique<FakeActivitySource>(
+        std::vector<ActivitySnapshot>{
+            snapshot("Cursor"),
+            snapshot("ChatGPT")});
+    TrackerService assistantTracker(browserDatabase, std::move(assistantSource));
+    assistantTracker.poll(start - 3 * 60 * 1000);
+    assistantTracker.poll(start - 2 * 60 * 1000);
+    assistantTracker.shutdown(start - 60 * 1000);
+    const auto cursor = browserDatabase.applicationByName("Cursor");
+    const auto chatgpt = browserDatabase.applicationByName("ChatGPT");
+    check(cursor && cursor->category == "Coding" && !cursor->is_distraction,
+          "Cursor is classified as coding");
+    check(chatgpt && chatgpt->category == "Research" && !chatgpt->is_distraction,
+          "AI companion apps are classified as research");
+
     auto browserSource = std::make_unique<FakeActivitySource>(
         std::vector<ActivitySnapshot>{
             snapshot("Google Chrome", 0, "Linear Algebra Lecture - YouTube"),
