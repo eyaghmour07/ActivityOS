@@ -1,0 +1,15 @@
+build/
+build-*/
+.cache/
+.DS_Store
+compile_commands.json
+*.db
+*.db-shm
+*.db-wal
+*.log
+*.csv
+*.json
+!CMakePresets.json
+!resources/demo/*.json
+.idea/
+.vscode/
