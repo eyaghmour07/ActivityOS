@@ -844,7 +844,7 @@ QWidget* MainWindow::buildSettingsPage() {
 }
 
 void MainWindow::buildTray() {
-    auto icon = QIcon::fromTheme("view-statistics");
+    auto icon = QApplication::windowIcon();
     if (icon.isNull()) {
         QPixmap pixmap(32, 32);
         pixmap.fill(Qt::transparent);

@@ -4,6 +4,7 @@
 
 #include <QApplication>
 #include <QDir>
+#include <QIcon>
 #include <QMessageBox>
 #include <QStandardPaths>
 
@@ -16,6 +17,7 @@ int main(int argc, char* argv[]) {
     application.setApplicationDisplayName("ActivityOS");
     application.setOrganizationName("ActivityOS");
     application.setOrganizationDomain("activityos.local");
+    application.setWindowIcon(QIcon(":/icons/activityos.png"));
     application.setQuitOnLastWindowClosed(false);
 
     try {

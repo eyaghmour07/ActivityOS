@@ -89,6 +89,11 @@ qt_add_executable(ActivityOS
     src/app/main.cpp
     src/app/main_window.cpp
     src/app/main_window.hpp
+    resources/activityos.qrc
+    resources/icons/ActivityOS.icns
+)
+set_source_files_properties(resources/icons/ActivityOS.icns PROPERTIES
+    MACOSX_PACKAGE_LOCATION "Resources"
 )
 target_link_libraries(ActivityOS
     PRIVATE
@@ -100,6 +105,7 @@ target_link_libraries(ActivityOS
 set_target_properties(ActivityOS PROPERTIES
     WIN32_EXECUTABLE TRUE
     MACOSX_BUNDLE TRUE
+    MACOSX_BUNDLE_ICON_FILE ActivityOS.icns
     MACOSX_BUNDLE_BUNDLE_NAME ActivityOS
     MACOSX_BUNDLE_GUI_IDENTIFIER com.activityos.desktop
     MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION}
