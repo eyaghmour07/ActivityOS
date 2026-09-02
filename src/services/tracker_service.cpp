@@ -79,7 +79,11 @@ std::optional<std::pair<std::string, bool>> browserTitleClassification(
                      "exam review", "midterm", "final exam", "student portal",
                      "physics", "chemistry", "biology", "calculus", "algebra",
                      "geometry", "statistics", "computer science", "economics",
-                     "google classroom",
+                     "google classroom", "google docs", "google sheets",
+                     "google slides", "microsoft word", "microsoft excel",
+                     "microsoft powerpoint", "office 365", "dropbox paper",
+                     "notion", "overleaf", "canvas student", "canvas dashboard",
+                     "blackboard", "coursera", "khan academy", "edx",
                      "schoology", "moodle", "brightspace", "d2l", "gradescope",
                      "webassign", "masteringphysics", "mastering chemistry", "mylab",
                      "pearson", "mcgraw hill connect", "cengage", "wileyplus",
@@ -88,10 +92,8 @@ std::optional<std::pair<std::string, bool>> browserTitleClassification(
     }
     if (containsAny({"github", "gitlab", "stack overflow", "stackexchange",
                      "mdn web docs", "developer.mozilla", "leetcode", "hackerrank",
-                     "codeforces", "coursera", "khan academy", "blackboard",
-                     "canvas student", "canvas dashboard", "edx", "overleaf",
-                     "google docs", "google sheets", "notion", "chatgpt", "claude",
-                     "gemini", "perplexity", "copilot", "poe"})) {
+                     "codeforces", "chatgpt", "claude", "gemini", "perplexity",
+                     "copilot", "poe"})) {
         return std::pair<std::string, bool>{"Research", false};
     }
     return std::nullopt;
