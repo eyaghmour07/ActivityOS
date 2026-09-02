@@ -46,6 +46,39 @@ std::pair<std::string, bool> defaultClassification(const std::string& applicatio
     return {"Other", false};
 }
 
+std::optional<std::pair<std::string, bool>> browserTitleClassification(
+    const std::string& application,
+    const std::optional<std::string>& windowTitle) {
+    if (!windowTitle || windowTitle->empty()) return std::nullopt;
+    const auto app = lower(application);
+    const bool browser =
+        app.find("chrome") != std::string::npos ||
+        app.find("safari") != std::string::npos ||
+        app.find("firefox") != std::string::npos ||
+        app.find("edge") != std::string::npos ||
+        app == "arc" || app.find("arc browser") != std::string::npos;
+    if (!browser) return std::nullopt;
+
+    const auto title = lower(*windowTitle);
+    const auto containsAny = [&](std::initializer_list<const char*> terms) {
+        return std::any_of(terms.begin(), terms.end(), [&](const char* term) {
+            return title.find(term) != std::string::npos;
+        });
+    };
+
+    if (containsAny({"youtube", "netflix", "twitch", "tiktok"})) {
+        return std::pair<std::string, bool>{"Entertainment", true};
+    }
+    if (containsAny({"github", "gitlab", "stack overflow", "stackexchange",
+                     "mdn web docs", "developer.mozilla", "leetcode", "hackerrank",
+                     "codeforces", "coursera", "khan academy", "blackboard",
+                     "canvas student", "canvas dashboard", "edx", "overleaf",
+                     "google docs", "google sheets", "notion"})) {
+        return std::pair<std::string, bool>{"Research", false};
+    }
+    return std::nullopt;
+}
+
 } // namespace
 
 std::int64_t unixMillisecondsNow() {
@@ -73,6 +106,11 @@ TrackerService::~TrackerService() {
 storage::Application TrackerService::classify(const ActivitySnapshot& snapshot,
                                               std::int64_t now_unix_ms) {
     auto [category, distraction] = defaultClassification(snapshot.application_name);
+    if (const auto browserClassification =
+            browserTitleClassification(snapshot.application_name, snapshot.window_title)) {
+        category = browserClassification->first;
+        distraction = browserClassification->second;
+    }
     auto rules = database_.classificationRules();
     std::stable_sort(rules.begin(), rules.end(), [](const auto& left, const auto& right) {
         return left.priority > right.priority;
@@ -183,6 +221,9 @@ TrackerStatus TrackerService::poll(std::int64_t now_unix_ms) {
     }
 
     const bool switched = current_ && current_->application_id != application.id;
+    const bool categoryChanged =
+        current_ && current_->application_id == application.id &&
+        current_->category != application.category;
     if (switched) {
         const auto previousId = current_->application_id;
         closeCurrent(now_unix_ms);
@@ -192,12 +233,16 @@ TrackerStatus TrackerService::poll(std::int64_t now_unix_ms) {
         contextSwitch.timestamp = now_unix_ms;
         database_.addContextSwitch(contextSwitch);
         recordEvent(application.id, now_unix_ms, "SWITCH", snapshot.window_title);
+    } else if (categoryChanged) {
+        closeCurrent(now_unix_ms);
+        recordEvent(application.id, now_unix_ms, "CATEGORY_CHANGE",
+                    snapshot.window_title);
     }
 
     if (!current_) {
         current_ = CurrentSession{application.id, application.name, application.category,
                                   now_unix_ms, now_unix_ms};
-        if (!switched) {
+        if (!switched && !categoryChanged) {
             recordEvent(application.id, now_unix_ms, "ACTIVE", snapshot.window_title);
         }
     } else {

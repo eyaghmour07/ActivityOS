@@ -15,9 +15,13 @@ void check(bool condition, const char* message) {
     }
 }
 
-activityos::ActivitySnapshot snapshot(std::string app, std::int64_t idle_ms = 0) {
+activityos::ActivitySnapshot snapshot(
+    std::string app,
+    std::int64_t idle_ms = 0,
+    std::optional<std::string> title = std::nullopt) {
     activityos::ActivitySnapshot value;
     value.application_name = std::move(app);
+    value.window_title = std::move(title);
     value.idle_duration = std::chrono::milliseconds(idle_ms);
     value.metadata.status = activityos::ActivitySourceStatus::available;
     value.metadata.capabilities = {true, true, true, true};
@@ -69,6 +73,45 @@ int main() {
     database.excludeApplication("Visual Studio Code");
     check(database.isApplicationExcluded("Visual Studio Code"),
           "privacy exclusion is persisted");
+
+    storage::Database browserDatabase = storage::Database::inMemory();
+    browserDatabase.migrate();
+    auto browserSource = std::make_unique<FakeActivitySource>(
+        std::vector<ActivitySnapshot>{
+            snapshot("Google Chrome", 0, "Linear Algebra Lecture - YouTube"),
+            snapshot("Google Chrome", 0, "ActivityOS repository - GitHub"),
+            snapshot("Visual Studio Code")});
+    TrackerService browserTracker(browserDatabase, std::move(browserSource));
+    browserTracker.poll(start);
+    browserTracker.poll(start + 5 * 60 * 1000);
+    browserTracker.poll(start + 10 * 60 * 1000);
+    browserTracker.shutdown(start + 11 * 60 * 1000);
+    const auto browserSessions =
+        browserDatabase.sessions({start, start + 12 * 60 * 1000});
+    check(browserSessions.size() >= 2 &&
+              browserSessions[0].category == "Entertainment" &&
+              browserSessions[1].category == "Research",
+          "browser title changes split entertainment and productive sessions");
+
+    storage::ClassificationRule studyOverride;
+    studyOverride.application_pattern = "Chrome";
+    studyOverride.title_pattern = "YouTube";
+    studyOverride.category = "Research";
+    studyOverride.priority = 100;
+    studyOverride.created_at = studyOverride.updated_at = start;
+    browserDatabase.saveClassificationRule(studyOverride);
+    auto studySource = std::make_unique<FakeActivitySource>(
+        std::vector<ActivitySnapshot>{
+            snapshot("Google Chrome", 0, "CS50 Lecture - YouTube"),
+            snapshot("Visual Studio Code")});
+    TrackerService studyTracker(browserDatabase, std::move(studySource));
+    studyTracker.poll(start + 10 * 60 * 1000);
+    studyTracker.poll(start + 11 * 60 * 1000);
+    studyTracker.shutdown(start + 12 * 60 * 1000);
+    const auto overriddenChrome = browserDatabase.applicationByName("Google Chrome");
+    check(overriddenChrome && overriddenChrome->category == "Research" &&
+              !overriddenChrome->is_distraction,
+          "user browser rules override built-in title classification");
 
     if (failures == 0) {
         std::cout << "All service tests passed.\n";

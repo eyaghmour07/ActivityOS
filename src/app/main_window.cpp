@@ -617,6 +617,13 @@ QWidget* MainWindow::buildInsightsPage() {
 QWidget* MainWindow::buildRulesPage() {
     QVBoxLayout* layout;
     auto* container = page("Application Rules", layout);
+    auto* browserHelp = new QLabel(
+        "Browser tabs are classified from their visible title without storing the title. "
+        "Study and developer sites count as Research; common streaming sites count as "
+        "Entertainment. Add a rule below whenever your use differs.");
+    browserHelp->setObjectName("activeApp");
+    browserHelp->setWordWrap(true);
+    layout->addWidget(browserHelp);
     auto* add = new QPushButton("Add Classification Rule");
     auto* remove = new QPushButton("Delete Selected");
     connect(add, &QPushButton::clicked, this, [this] {

@@ -9,6 +9,7 @@ The app is built with C++20, Qt 6, and SQLite. It runs from the system tray and 
 - Native foreground-application and idle detection for macOS, Windows, and Linux/X11
 - Session, workday, and context-switch detection
 - User-editable application and optional window-title classification rules
+- Browser-aware classification that separates common study/development sites from streaming distractions
 - Local SQLite history with safe migrations, transactions, and retention cleanup
 - Daily and weekly activity summaries
 - Focus and deep-work detection
