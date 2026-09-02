@@ -5,11 +5,14 @@
 #include <QCloseEvent>
 #include <QDateTime>
 #include <QDir>
+#include <QEvent>
 #include <QFile>
 #include <QFileDialog>
 #include <QFont>
 #include <QFormLayout>
 #include <QFrame>
+#include <QGraphicsDropShadowEffect>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QInputDialog>
@@ -58,8 +61,9 @@ QString percent(double value) {
 
 QLabel* titleLabel(const QString& text) {
     auto* label = new QLabel(text);
+    label->setObjectName("pageTitle");
     QFont font = label->font();
-    font.setPointSize(22);
+    font.setPointSize(24);
     font.setBold(true);
     label->setFont(font);
     return label;
@@ -68,13 +72,21 @@ QLabel* titleLabel(const QString& text) {
 QFrame* metricCard(const QString& label, QLabel*& value) {
     auto* frame = new QFrame;
     frame->setObjectName("metricCard");
+    frame->setMinimumHeight(104);
     auto* layout = new QVBoxLayout(frame);
+    layout->setContentsMargins(18, 15, 18, 15);
+    layout->setSpacing(7);
     auto* caption = new QLabel(label);
     caption->setObjectName("metricCaption");
     value = new QLabel("—");
     value->setObjectName("metricValue");
     layout->addWidget(caption);
     layout->addWidget(value);
+    auto* shadow = new QGraphicsDropShadowEffect(frame);
+    shadow->setBlurRadius(18);
+    shadow->setOffset(0, 4);
+    shadow->setColor(QColor(0, 0, 0, 28));
+    frame->setGraphicsEffect(shadow);
     return frame;
 }
 
@@ -86,15 +98,20 @@ QTableWidget* table(const QStringList& headers) {
     widget->verticalHeader()->hide();
     widget->setEditTriggers(QAbstractItemView::NoEditTriggers);
     widget->setSelectionBehavior(QAbstractItemView::SelectRows);
+    widget->setSelectionMode(QAbstractItemView::SingleSelection);
     widget->setAlternatingRowColors(true);
+    widget->setShowGrid(false);
+    widget->setFocusPolicy(Qt::NoFocus);
+    widget->verticalHeader()->setDefaultSectionSize(38);
+    widget->horizontalHeader()->setMinimumHeight(40);
     return widget;
 }
 
 QWidget* page(const QString& title, QVBoxLayout*& layout) {
     auto* container = new QWidget;
     layout = new QVBoxLayout(container);
-    layout->setContentsMargins(28, 24, 28, 24);
-    layout->setSpacing(16);
+    layout->setContentsMargins(32, 28, 32, 28);
+    layout->setSpacing(18);
     layout->addWidget(titleLabel(title));
     return container;
 }
@@ -176,6 +193,7 @@ MainWindow::MainWindow(storage::Database& database, QWidget* parent)
     setWindowTitle("ActivityOS");
     resize(1180, 760);
     setMinimumSize(940, 620);
+    qApp->installEventFilter(this);
     buildShell();
     buildTray();
 
@@ -193,6 +211,7 @@ MainWindow::MainWindow(storage::Database& database, QWidget* parent)
 }
 
 MainWindow::~MainWindow() {
+    qApp->removeEventFilter(this);
     if (tracker_) tracker_->shutdown(unixMillisecondsNow());
 }
 
@@ -202,13 +221,30 @@ void MainWindow::buildShell() {
     shell->setContentsMargins(0, 0, 0, 0);
     shell->setSpacing(0);
 
+    auto* sidebar = new QFrame;
+    sidebar->setObjectName("sidebar");
+    sidebar->setFixedWidth(226);
+    auto* sidebarLayout = new QVBoxLayout(sidebar);
+    sidebarLayout->setContentsMargins(14, 22, 14, 18);
+    sidebarLayout->setSpacing(10);
+    auto* brand = new QLabel("ActivityOS");
+    brand->setObjectName("brand");
+    auto* tagline = new QLabel("Your work, made visible");
+    tagline->setObjectName("tagline");
+    sidebarLayout->addWidget(brand);
+    sidebarLayout->addWidget(tagline);
+    sidebarLayout->addSpacing(18);
+
     navigation_ = new QListWidget;
     navigation_->setObjectName("navigation");
-    navigation_->setFixedWidth(205);
-    navigation_->addItems({"Today", "History", "Analytics", "Weekly Report", "Goals",
-                           "Experiments", "Insights", "Application Rules", "Privacy",
-                           "Settings"});
+    navigation_->addItems({"Overview", "History", "Analytics", "Weekly report", "Goals",
+                           "Experiments", "Insights", "App rules", "Privacy", "Settings"});
     navigation_->setCurrentRow(0);
+    sidebarLayout->addWidget(navigation_, 1);
+    auto* localBadge = new QLabel("  Local-only · Private");
+    localBadge->setObjectName("localBadge");
+    localBadge->setToolTip("Your activity stays in a local SQLite database.");
+    sidebarLayout->addWidget(localBadge);
 
     pages_ = new QStackedWidget;
     pages_->addWidget(buildTodayPage());
@@ -224,45 +260,147 @@ void MainWindow::buildShell() {
     connect(navigation_, &QListWidget::currentRowChanged, pages_,
             &QStackedWidget::setCurrentIndex);
 
-    shell->addWidget(navigation_);
+    shell->addWidget(sidebar);
     shell->addWidget(pages_, 1);
     setCentralWidget(central);
     setStyleSheet(R"(
-        QMainWindow, QWidget { background: palette(window); }
-        #navigation { border: 0; border-right: 1px solid palette(mid); padding-top: 18px; }
-        #navigation::item { padding: 12px 18px; margin: 2px 8px; border-radius: 7px; }
-        #navigation::item:selected { background: palette(highlight); color: palette(highlighted-text); }
-        #metricCard { border: 1px solid palette(mid); border-radius: 10px; padding: 10px; }
-        #metricCaption { color: palette(mid); font-size: 12px; }
-        #metricValue { font-size: 24px; font-weight: 700; }
-        QPushButton { padding: 7px 12px; }
-        QTableWidget { border: 1px solid palette(mid); border-radius: 7px; }
+        QMainWindow, QWidget { background: palette(window); color: palette(window-text); }
+        #sidebar { background: palette(base); border-right: 1px solid palette(midlight); }
+        #brand { font-size: 23px; font-weight: 750; color: palette(highlight); padding-left: 8px; }
+        #tagline { font-size: 12px; color: palette(mid); padding-left: 8px; }
+        #localBadge {
+            background: palette(alternate-base);
+            border: 1px solid palette(midlight);
+            border-radius: 9px;
+            padding: 9px;
+            font-size: 12px;
+            color: palette(mid);
+        }
+        #navigation { border: 0; background: transparent; outline: 0; }
+        #navigation::item {
+            min-height: 25px;
+            padding: 9px 13px;
+            margin: 2px 0;
+            border-radius: 8px;
+        }
+        #navigation::item:hover { background: palette(alternate-base); }
+        #navigation::item:selected {
+            background: palette(highlight);
+            color: palette(highlighted-text);
+            font-weight: 650;
+        }
+        #pageTitle { letter-spacing: -0.4px; }
+        #trackingPill {
+            background: palette(alternate-base);
+            border: 1px solid palette(midlight);
+            border-radius: 10px;
+            padding: 7px 11px;
+            font-weight: 650;
+        }
+        #activeApp { color: palette(mid); font-size: 13px; }
+        #metricCard {
+            background: palette(base);
+            border: 1px solid palette(midlight);
+            border-radius: 12px;
+        }
+        #metricCard:hover { border: 1px solid palette(highlight); }
+        #metricCaption { color: palette(mid); font-size: 12px; font-weight: 600; }
+        #metricValue { font-size: 25px; font-weight: 750; }
+        QPushButton {
+            background: palette(button);
+            border: 1px solid palette(midlight);
+            border-radius: 8px;
+            padding: 8px 14px;
+            font-weight: 600;
+        }
+        QPushButton:hover { border-color: palette(highlight); }
+        QPushButton:pressed { background: palette(alternate-base); }
+        QTableWidget {
+            background: palette(base);
+            alternate-background-color: palette(alternate-base);
+            border: 1px solid palette(midlight);
+            border-radius: 10px;
+            padding: 2px;
+        }
+        #insightList {
+            background: palette(base);
+            border: 1px solid palette(midlight);
+            border-radius: 10px;
+            outline: 0;
+            padding: 6px;
+        }
+        #insightList::item {
+            background: palette(alternate-base);
+            border-radius: 8px;
+            margin: 4px;
+            padding: 12px;
+        }
+        QHeaderView::section {
+            background: palette(alternate-base);
+            border: 0;
+            border-bottom: 1px solid palette(midlight);
+            padding: 8px;
+            font-weight: 650;
+        }
+        QLineEdit, QSpinBox, QComboBox {
+            background: palette(base);
+            border: 1px solid palette(midlight);
+            border-radius: 7px;
+            padding: 7px;
+        }
+        QStatusBar { border-top: 1px solid palette(midlight); color: palette(mid); }
     )");
-    statusBar()->showMessage("Local-only mode");
+    statusBar()->showMessage("Everything stays on this device");
 }
 
 QWidget* MainWindow::buildTodayPage() {
     QVBoxLayout* layout;
-    auto* container = page("Today", layout);
-    trackingState_ = new QLabel("Starting tracker…");
-    activeApplication_ = new QLabel;
-    layout->addWidget(trackingState_);
-    layout->addWidget(activeApplication_);
+    auto* container = page("Good to see you", layout);
+    auto* subtitle = new QLabel(
+        "A private snapshot of how your workday is taking shape.");
+    subtitle->setObjectName("activeApp");
+    layout->addWidget(subtitle);
 
-    auto* cards = new QHBoxLayout;
-    cards->addWidget(metricCard("Focused Work", focusedValue_));
-    cards->addWidget(metricCard("Deep Work", deepWorkValue_));
-    cards->addWidget(metricCard("Distraction", distractionValue_));
-    cards->addWidget(metricCard("Context Switches", switchesValue_));
-    cards->addWidget(metricCard("Score", scoreValue_));
-    cards->addWidget(metricCard("Workday", workdayValue_));
+    auto* statusRow = new QHBoxLayout;
+    trackingState_ = new QLabel("Starting tracker…");
+    trackingState_->setObjectName("trackingPill");
+    activeApplication_ = new QLabel;
+    activeApplication_->setObjectName("activeApp");
+    auto* refreshButton = new QPushButton("Refresh");
+    connect(refreshButton, &QPushButton::clicked, this, [this] { refresh(); });
+    statusRow->addWidget(trackingState_, 0);
+    statusRow->addWidget(activeApplication_, 1);
+    statusRow->addWidget(refreshButton, 0);
+    layout->addLayout(statusRow);
+
+    auto* cards = new QGridLayout;
+    cards->setHorizontalSpacing(14);
+    cards->setVerticalSpacing(14);
+    cards->addWidget(metricCard("FOCUSED WORK", focusedValue_), 0, 0);
+    cards->addWidget(metricCard("DEEP WORK", deepWorkValue_), 0, 1);
+    cards->addWidget(metricCard("DISTRACTION", distractionValue_), 0, 2);
+    cards->addWidget(metricCard("CONTEXT SWITCHES", switchesValue_), 1, 0);
+    cards->addWidget(metricCard("PRODUCTIVITY SCORE", scoreValue_), 1, 1);
+    cards->addWidget(metricCard("WORKDAY SPAN", workdayValue_), 1, 2);
     layout->addLayout(cards);
 
     auto* columns = new QHBoxLayout;
+    auto* distributionColumn = new QVBoxLayout;
+    auto* distributionLabel = new QLabel("Where your time went");
+    distributionLabel->setStyleSheet("font-size: 15px; font-weight: 650;");
     categoryTable_ = table({"Category", "Time", "Share"});
+    distributionColumn->addWidget(distributionLabel);
+    distributionColumn->addWidget(categoryTable_);
+    auto* insightColumn = new QVBoxLayout;
+    auto* insightLabel = new QLabel("What stands out");
+    insightLabel->setStyleSheet("font-size: 15px; font-weight: 650;");
     todayInsights_ = new QListWidget;
-    columns->addWidget(categoryTable_, 3);
-    columns->addWidget(todayInsights_, 2);
+    todayInsights_->setObjectName("insightList");
+    todayInsights_->setWordWrap(true);
+    insightColumn->addWidget(insightLabel);
+    insightColumn->addWidget(todayInsights_);
+    columns->addLayout(distributionColumn, 3);
+    columns->addLayout(insightColumn, 2);
     layout->addLayout(columns, 1);
     return container;
 }
@@ -1019,6 +1157,17 @@ void MainWindow::closeEvent(QCloseEvent* event) {
                        "Use the tray menu to pause tracking or quit.",
                        QSystemTrayIcon::Information, 2500);
     event->ignore();
+}
+
+bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == qApp && event->type() == QEvent::ApplicationActivate &&
+        !isVisible()) {
+        showNormal();
+        raise();
+        activateWindow();
+        return true;
+    }
+    return QMainWindow::eventFilter(watched, event);
 }
 
 } // namespace activityos::ui

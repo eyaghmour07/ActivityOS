@@ -134,7 +134,6 @@ qt_generate_deploy_app_script(
     TARGET ActivityOS
     OUTPUT_SCRIPT activityos_deploy_script
     NO_UNSUPPORTED_PLATFORM_ERROR
-    INCLUDE_PLUGIN_TYPES platforms styles
 )
 install(SCRIPT ${activityos_deploy_script})
 
