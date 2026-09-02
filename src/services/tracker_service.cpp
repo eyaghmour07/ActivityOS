@@ -73,6 +73,19 @@ std::optional<std::pair<std::string, bool>> browserTitleClassification(
     if (containsAny({"youtube", "netflix", "twitch", "tiktok"})) {
         return std::pair<std::string, bool>{"Entertainment", true};
     }
+    if (containsAny({"homework", "assignment", "worksheet", "problem set",
+                     "practice problems", "lab report", "coursework", "study guide",
+                     "class notes", "lecture notes", "chapter", "lesson", "textbook",
+                     "exam review", "midterm", "final exam", "student portal",
+                     "physics", "chemistry", "biology", "calculus", "algebra",
+                     "geometry", "statistics", "computer science", "economics",
+                     "google classroom",
+                     "schoology", "moodle", "brightspace", "d2l", "gradescope",
+                     "webassign", "masteringphysics", "mastering chemistry", "mylab",
+                     "pearson", "mcgraw hill connect", "cengage", "wileyplus",
+                     "zybooks", "aleks", "piazza", "ed discussion", "quizlet"})) {
+        return std::pair<std::string, bool>{"Work", false};
+    }
     if (containsAny({"github", "gitlab", "stack overflow", "stackexchange",
                      "mdn web docs", "developer.mozilla", "leetcode", "hackerrank",
                      "codeforces", "coursera", "khan academy", "blackboard",

@@ -95,18 +95,21 @@ int main() {
         std::vector<ActivitySnapshot>{
             snapshot("Google Chrome", 0, "Linear Algebra Lecture - YouTube"),
             snapshot("Google Chrome", 0, "ActivityOS repository - GitHub"),
+            snapshot("Google Chrome", 0, "Physics Sheet - Course Documents"),
             snapshot("Visual Studio Code")});
     TrackerService browserTracker(browserDatabase, std::move(browserSource));
     browserTracker.poll(start);
     browserTracker.poll(start + 5 * 60 * 1000);
     browserTracker.poll(start + 10 * 60 * 1000);
-    browserTracker.shutdown(start + 11 * 60 * 1000);
+    browserTracker.poll(start + 15 * 60 * 1000);
+    browserTracker.shutdown(start + 16 * 60 * 1000);
     const auto browserSessions =
-        browserDatabase.sessions({start, start + 12 * 60 * 1000});
-    check(browserSessions.size() >= 2 &&
+        browserDatabase.sessions({start, start + 17 * 60 * 1000});
+    check(browserSessions.size() >= 3 &&
               browserSessions[0].category == "Entertainment" &&
-              browserSessions[1].category == "Research",
-          "browser title changes split entertainment and productive sessions");
+              browserSessions[1].category == "Research" &&
+              browserSessions[2].category == "Work",
+          "browser title changes split entertainment, research, and schoolwork sessions");
 
     storage::ClassificationRule studyOverride;
     studyOverride.application_pattern = "Chrome";
