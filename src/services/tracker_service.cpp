@@ -50,18 +50,88 @@ std::pair<std::string, bool> defaultClassification(const std::string& applicatio
     return {"Other", false};
 }
 
+std::string extractHost(const std::string& url) {
+    const auto value = lower(url);
+    std::size_t start = 0;
+    if (const auto scheme = value.find("://"); scheme != std::string::npos) {
+        start = scheme + 3;
+    }
+    std::size_t end = value.find('/', start);
+    if (end == std::string::npos) end = value.size();
+    std::string host = value.substr(start, end - start);
+    if (const auto colon = host.find(':'); colon != std::string::npos) {
+        host.resize(colon);
+    }
+    if (host.rfind("www.", 0) == 0) host = host.substr(4);
+    return host;
+}
+
+bool hostMatches(const std::string& host, std::initializer_list<const char*> domains) {
+    for (const char* domain : domains) {
+        const std::string pattern(domain);
+        if (host == pattern) return true;
+        if (host.size() > pattern.size() + 1 &&
+            host.compare(host.size() - pattern.size() - 1, pattern.size() + 1,
+                         "." + pattern) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool isBrowserApplication(const std::string& application) {
+    const auto app = lower(application);
+    return app.find("chrome") != std::string::npos ||
+           app.find("safari") != std::string::npos ||
+           app.find("firefox") != std::string::npos ||
+           app.find("edge") != std::string::npos ||
+           app == "arc" || app.find("arc browser") != std::string::npos;
+}
+
+std::optional<std::pair<std::string, bool>> browserUrlClassification(
+    const std::optional<std::string>& browserUrl) {
+    if (!browserUrl || browserUrl->empty()) return std::nullopt;
+    const auto host = extractHost(*browserUrl);
+
+    if (hostMatches(host, {"youtube.com", "netflix.com", "twitch.tv", "tiktok.com"})) {
+        return std::pair<std::string, bool>{"Entertainment", true};
+    }
+    if (hostMatches(host, {"docs.google.com", "drive.google.com", "classroom.google.com",
+                           "slides.google.com", "sheets.google.com", "canvas.instructure.com",
+                           "instructure.com", "blackboard.com", "schoology.com", "moodle.org",
+                           "moodle.com", "gradescope.com", "webassign.net", "cengage.com",
+                           "pearson.com", "mcgrawhill.com", "wileyplus.com", "zybooks.com",
+                           "aleks.com", "piazza.com", "edstem.org", "quizlet.com",
+                           "overleaf.com", "notion.so", "office.com", "office365.com",
+                           "live.com", "sharepoint.com", "dropbox.com"})) {
+        return std::pair<std::string, bool>{"Work", false};
+    }
+    const auto lowerUrl = lower(*browserUrl);
+    if (host.size() >= 4 && host.compare(host.size() - 4, 4, ".edu") == 0) {
+        return std::pair<std::string, bool>{"Work", false};
+    }
+    const auto containsPath = [&](std::initializer_list<const char*> parts) {
+        return std::any_of(parts.begin(), parts.end(), [&](const char* part) {
+            return lowerUrl.find(part) != std::string::npos;
+        });
+    };
+    if (containsPath({"/courses/", "/lectures/", "/assignments/", "/homework/",
+                      "/slides/", "/syllabus/", "/modules/", "/discussion/"})) {
+        return std::pair<std::string, bool>{"Work", false};
+    }
+    if (hostMatches(host, {"github.com", "gitlab.com", "stackoverflow.com",
+                           "stackexchange.com", "developer.mozilla.org", "leetcode.com",
+                           "hackerrank.com", "codeforces.com", "chatgpt.com", "openai.com",
+                           "claude.ai", "gemini.google.com", "perplexity.ai", "copilot.microsoft.com",
+                           "poe.com"})) {
+        return std::pair<std::string, bool>{"Research", false};
+    }
+    return std::nullopt;
+}
+
 std::optional<std::pair<std::string, bool>> browserTitleClassification(
-    const std::string& application,
     const std::optional<std::string>& windowTitle) {
     if (!windowTitle || windowTitle->empty()) return std::nullopt;
-    const auto app = lower(application);
-    const bool browser =
-        app.find("chrome") != std::string::npos ||
-        app.find("safari") != std::string::npos ||
-        app.find("firefox") != std::string::npos ||
-        app.find("edge") != std::string::npos ||
-        app == "arc" || app.find("arc browser") != std::string::npos;
-    if (!browser) return std::nullopt;
 
     const auto title = lower(*windowTitle);
     const auto containsAny = [&](std::initializer_list<const char*> terms) {
@@ -99,6 +169,17 @@ std::optional<std::pair<std::string, bool>> browserTitleClassification(
     return std::nullopt;
 }
 
+std::optional<std::pair<std::string, bool>> browserContextClassification(
+    const std::string& application,
+    const std::optional<std::string>& windowTitle,
+    const std::optional<std::string>& browserUrl) {
+    if (!isBrowserApplication(application)) return std::nullopt;
+    if (const auto urlClassification = browserUrlClassification(browserUrl)) {
+        return urlClassification;
+    }
+    return browserTitleClassification(windowTitle);
+}
+
 } // namespace
 
 std::int64_t unixMillisecondsNow() {
@@ -126,8 +207,8 @@ TrackerService::~TrackerService() {
 storage::Application TrackerService::classify(const ActivitySnapshot& snapshot,
                                               std::int64_t now_unix_ms) {
     auto [category, distraction] = defaultClassification(snapshot.application_name);
-    if (const auto browserClassification =
-            browserTitleClassification(snapshot.application_name, snapshot.window_title)) {
+    if (const auto browserClassification = browserContextClassification(
+            snapshot.application_name, snapshot.window_title, snapshot.browser_url)) {
         category = browserClassification->first;
         distraction = browserClassification->second;
     }

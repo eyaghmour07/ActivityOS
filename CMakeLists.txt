@@ -23,7 +23,7 @@ if(APPLE)
 endif()
 
 find_package(SQLite3 REQUIRED)
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Network Widgets)
 
 if(TARGET SQLite3::SQLite3)
     set(ACTIVITYOS_SQLITE_TARGET SQLite3::SQLite3)
@@ -47,9 +47,15 @@ target_compile_definitions(activityos_storage PRIVATE
     ACTIVITYOS_MIGRATIONS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/resources/migrations"
 )
 
-set(ACTIVITYOS_PLATFORM_SOURCE src/platform/activity_source.cpp)
+set(ACTIVITYOS_PLATFORM_SOURCE
+    src/platform/activity_source.cpp
+    src/platform/platform_permissions.cpp
+)
 if(APPLE)
-    list(APPEND ACTIVITYOS_PLATFORM_SOURCE src/platform/macos_activity_source.mm)
+    list(APPEND ACTIVITYOS_PLATFORM_SOURCE
+        src/platform/macos_activity_source.mm
+        src/platform/macos_permissions.mm
+    )
 elseif(WIN32)
     list(APPEND ACTIVITYOS_PLATFORM_SOURCE src/platform/windows_activity_source.cpp)
 elseif(UNIX)
@@ -100,6 +106,7 @@ target_link_libraries(ActivityOS
         activityos_services
         Qt6::Core
         Qt6::Gui
+        Qt6::Network
         Qt6::Widgets
 )
 set_target_properties(ActivityOS PROPERTIES
@@ -109,7 +116,18 @@ set_target_properties(ActivityOS PROPERTIES
     MACOSX_BUNDLE_BUNDLE_NAME ActivityOS
     MACOSX_BUNDLE_GUI_IDENTIFIER com.activityos.desktop
     MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION}
+    MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
+    MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/resources/macos/Info.plist"
 )
+
+if(APPLE)
+    add_custom_command(TARGET ActivityOS POST_BUILD
+        COMMAND codesign --force --sign -
+                --entitlements "${CMAKE_CURRENT_SOURCE_DIR}/resources/macos/ActivityOS.entitlements"
+                "$<TARGET_BUNDLE_DIR:ActivityOS>"
+        COMMENT "Sign ActivityOS with Chrome automation entitlements"
+    )
+endif()
 
 if(MSVC)
     foreach(target activityos_analytics activityos_storage activityos_platform activityos_services)

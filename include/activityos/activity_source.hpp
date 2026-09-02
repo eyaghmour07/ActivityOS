@@ -21,6 +21,7 @@ enum class ActivitySourceStatus {
 struct ActivityCapabilities {
     bool application_name{false};
     bool window_title{false};
+    bool browser_url{false};
     bool process_id{false};
     bool idle_duration{false};
 
@@ -38,6 +39,7 @@ struct ActivitySourceMetadata {
 struct ActivitySnapshot {
     std::string application_name;
     std::optional<std::string> window_title;
+    std::optional<std::string> browser_url;
     std::uint64_t process_id{0};
     std::chrono::milliseconds idle_duration{0};
     ActivitySourceMetadata metadata{};

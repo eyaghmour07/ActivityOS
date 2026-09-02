@@ -8,6 +8,8 @@
 #include <cmath>
 #include <memory>
 #include <string>
+#include <algorithm>
+#include <cctype>
 
 namespace activityos::detail {
 namespace {
@@ -34,6 +36,12 @@ std::string toUtf8(CFStringRef value) {
     }
     result.resize(std::char_traits<char>::length(result.c_str()));
     return result;
+}
+
+// Window names are withheld unless the user has granted Screen & System Audio Recording.
+// Permission is requested once at app startup; capture only checks current access here.
+bool screenRecordingAccessGranted() {
+    return CGPreflightScreenCaptureAccess();
 }
 
 std::optional<std::string> frontmostWindowTitle(pid_t process_id, bool& query_succeeded) {
@@ -83,6 +91,61 @@ std::optional<std::string> frontmostWindowTitle(pid_t process_id, bool& query_su
     return title;
 }
 
+std::string lower(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return value;
+}
+
+bool isGoogleChrome(const std::string& application_name, NSString* bundle_identifier) {
+    if (bundle_identifier != nil &&
+        [bundle_identifier isEqualToString:@"com.google.Chrome"]) {
+        return true;
+    }
+    const auto name = lower(application_name);
+    return name.find("google chrome") != std::string::npos || name == "chrome";
+}
+
+struct ChromeTabInfo {
+    std::optional<std::string> url;
+    std::optional<std::string> title;
+    bool automation_allowed{true};
+};
+
+ChromeTabInfo queryChromeActiveTab() {
+    ChromeTabInfo info;
+    NSString* scriptSource =
+        @"tell application \"Google Chrome\"\n"
+         @"if (count of windows) is 0 then return \"\"\n"
+         @"set tabUrl to URL of active tab of front window\n"
+         @"set tabTitle to title of active tab of front window\n"
+         @"return tabUrl & \"\\t\" & tabTitle\n"
+         @"end tell";
+
+    NSDictionary* errorInfo = nil;
+    NSAppleScript* script = [[NSAppleScript alloc] initWithSource:scriptSource];
+    NSAppleEventDescriptor* result = [script executeAndReturnError:&errorInfo];
+    if (errorInfo != nil) {
+        info.automation_allowed = false;
+        return info;
+    }
+
+    NSString* output = result.stringValue;
+    if (output == nil || output.length == 0) return info;
+
+    NSArray<NSString*>* parts = [output componentsSeparatedByString:@"\t"];
+    if (parts.count >= 1) {
+        const std::string url = toUtf8(parts[0]);
+        if (!url.empty()) info.url = url;
+    }
+    if (parts.count >= 2) {
+        const std::string title = toUtf8(parts[1]);
+        if (!title.empty()) info.title = title;
+    }
+    return info;
+}
+
 class MacOSActivitySource final : public ActivitySource {
 public:
     [[nodiscard]] ActivitySnapshot capture() override {
@@ -108,15 +171,51 @@ public:
             snapshot.process_id = static_cast<std::uint64_t>(process_id);
             snapshot.metadata.capabilities.process_id = process_id > 0;
 
-            bool window_query_succeeded = false;
-            snapshot.window_title =
-                frontmostWindowTitle(process_id, window_query_succeeded);
-            snapshot.metadata.capabilities.window_title =
-                snapshot.window_title.has_value();
-            if (!window_query_succeeded) {
-                snapshot.metadata.status = ActivitySourceStatus::degraded;
-                snapshot.metadata.error_message =
-                    "CoreGraphics window metadata is unavailable";
+            if (isGoogleChrome(snapshot.application_name, application.bundleIdentifier)) {
+                const ChromeTabInfo tab = queryChromeActiveTab();
+                snapshot.browser_url = tab.url;
+                snapshot.window_title = tab.title;
+                snapshot.metadata.capabilities.browser_url = tab.url.has_value();
+                snapshot.metadata.capabilities.window_title = tab.title.has_value();
+
+                if (!tab.url && !tab.title) {
+                    bool window_query_succeeded = false;
+                    snapshot.window_title =
+                        frontmostWindowTitle(process_id, window_query_succeeded);
+                    snapshot.metadata.capabilities.window_title =
+                        snapshot.window_title.has_value();
+                    if (!tab.automation_allowed) {
+                        snapshot.metadata.status = ActivitySourceStatus::degraded;
+                        snapshot.metadata.error_message =
+                            "Allow ActivityOS to control Google Chrome under Privacy & "
+                            "Security > Automation to classify tabs by site";
+                    } else if (!window_query_succeeded) {
+                        snapshot.metadata.status = ActivitySourceStatus::degraded;
+                        snapshot.metadata.error_message =
+                            "Chrome tab metadata is unavailable";
+                    } else if (!snapshot.window_title && !screenRecordingAccessGranted()) {
+                        snapshot.metadata.status = ActivitySourceStatus::degraded;
+                        snapshot.metadata.error_message =
+                            "Allow ActivityOS to control Google Chrome, or enable Screen & "
+                            "System Audio Recording, to classify browser tabs";
+                    }
+                }
+            } else {
+                bool window_query_succeeded = false;
+                snapshot.window_title =
+                    frontmostWindowTitle(process_id, window_query_succeeded);
+                snapshot.metadata.capabilities.window_title =
+                    snapshot.window_title.has_value();
+                if (!window_query_succeeded) {
+                    snapshot.metadata.status = ActivitySourceStatus::degraded;
+                    snapshot.metadata.error_message =
+                        "CoreGraphics window metadata is unavailable";
+                } else if (!snapshot.window_title && !screenRecordingAccessGranted()) {
+                    snapshot.metadata.status = ActivitySourceStatus::degraded;
+                    snapshot.metadata.error_message =
+                        "Allow ActivityOS under Privacy & Security > Screen & System Audio "
+                        "Recording to classify browser tabs in non-Chrome browsers";
+                }
             }
 
             const double idle_seconds = CGEventSourceSecondsSinceLastEventType(

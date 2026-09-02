@@ -93,7 +93,7 @@ Data is stored in the operating system’s standard local application-data direc
 
 ## Platform notes
 
-- **macOS:** Foreground application and idle duration use AppKit and CoreGraphics. Window-title availability depends on macOS privacy permissions. Titles are not persisted by default.
+- **macOS:** Foreground application and idle duration use AppKit and CoreGraphics. Chrome tab sites are read via Apple Automation when allowed; other browsers fall back to window titles. URLs and titles are not persisted by default.
 - **Windows:** Foreground application and idle duration use Win32 APIs.
 - **Linux/X11:** Active-window metadata uses EWMH/X11 and idle duration uses XScreenSaver.
 - **Linux/Wayland:** Global active-window inspection is intentionally restricted by many compositors. ActivityOS reports this limitation instead of recording misleading data; an X11/XWayland session is currently required.

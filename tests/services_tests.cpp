@@ -18,10 +18,12 @@ void check(bool condition, const char* message) {
 activityos::ActivitySnapshot snapshot(
     std::string app,
     std::int64_t idle_ms = 0,
-    std::optional<std::string> title = std::nullopt) {
+    std::optional<std::string> title = std::nullopt,
+    std::optional<std::string> url = std::nullopt) {
     activityos::ActivitySnapshot value;
     value.application_name = std::move(app);
     value.window_title = std::move(title);
+    value.browser_url = std::move(url);
     value.idle_duration = std::chrono::milliseconds(idle_ms);
     value.metadata.status = activityos::ActivitySourceStatus::available;
     value.metadata.capabilities = {true, true, true, true};
@@ -113,6 +115,26 @@ int main() {
               browserSessions[2].category == "Work" &&
               browserSessions[3].category == "Coding",
           "schoolwork and browser documents share one Work session");
+
+    auto urlSource = std::make_unique<FakeActivitySource>(
+        std::vector<ActivitySnapshot>{
+            snapshot("Google Chrome", 0, "Untitled",
+                       "https://docs.google.com/document/d/abc/edit"),
+            snapshot("Google Chrome", 0, "Slides",
+                       "https://courses.grainger.illinois.edu/cs225/fa2026/assets/lectures/"
+                       "slides/cs225fa26-05-linked3-slides.pdf"),
+            snapshot("Google Chrome", 0, "Watch later",
+                       "https://www.youtube.com/watch?v=abc")});
+    TrackerService urlTracker(browserDatabase, std::move(urlSource));
+    urlTracker.poll(start + 30 * 60 * 1000);
+    urlTracker.poll(start + 35 * 60 * 1000);
+    urlTracker.poll(start + 40 * 60 * 1000);
+    urlTracker.shutdown(start + 41 * 60 * 1000);
+    const auto urlSessions =
+        browserDatabase.sessions({start + 30 * 60 * 1000, start + 42 * 60 * 1000});
+    check(urlSessions.size() == 2 && urlSessions[0].category == "Work" &&
+              urlSessions[1].category == "Entertainment",
+          "browser URLs classify docs, school sites, and YouTube");
 
     storage::ClassificationRule studyOverride;
     studyOverride.application_pattern = "Chrome";

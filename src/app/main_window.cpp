@@ -618,10 +618,9 @@ QWidget* MainWindow::buildRulesPage() {
     QVBoxLayout* layout;
     auto* container = page("Application Rules", layout);
     auto* browserHelp = new QLabel(
-        "Browser tabs are classified from their visible title without storing the title. "
-        "Homework, school platforms, and browser document editors count as Work; "
-        "developer and AI-assistant sites count as Research; common streaming sites "
-        "count as Entertainment. Add a rule below whenever your use differs.");
+        "Chrome tabs are classified from the active site URL when macOS allows ActivityOS "
+        "to control Google Chrome. Other browsers fall back to visible titles. URLs and "
+        "titles are not stored by default. Add a rule below whenever your use differs.");
     browserHelp->setObjectName("activeApp");
     browserHelp->setWordWrap(true);
     layout->addWidget(browserHelp);
