@@ -25,6 +25,14 @@ endif()
 find_package(SQLite3 REQUIRED)
 find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets)
 
+if(TARGET SQLite3::SQLite3)
+    set(ACTIVITYOS_SQLITE_TARGET SQLite3::SQLite3)
+elseif(TARGET SQLite::SQLite3)
+    set(ACTIVITYOS_SQLITE_TARGET SQLite::SQLite3)
+else()
+    message(FATAL_ERROR "FindSQLite3 did not provide a supported imported target")
+endif()
+
 add_library(activityos_analytics
     src/core/analytics.cpp
 )
@@ -34,7 +42,7 @@ add_library(activityos_storage
     src/storage/storage.cpp
 )
 target_include_directories(activityos_storage PUBLIC include)
-target_link_libraries(activityos_storage PUBLIC SQLite3::SQLite3)
+target_link_libraries(activityos_storage PUBLIC ${ACTIVITYOS_SQLITE_TARGET})
 target_compile_definitions(activityos_storage PRIVATE
     ACTIVITYOS_MIGRATIONS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/resources/migrations"
 )
