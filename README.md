@@ -83,6 +83,19 @@ Linux:
 ./build/ActivityOS
 ```
 
+## Share with a friend (macOS)
+
+Downloaded installers are often blocked by macOS Gatekeeper. The reliable approach is to build on their Mac:
+
+```sh
+git clone https://github.com/eyaghmour07/ActivityOS.git
+cd ActivityOS
+chmod +x scripts/install_macos.sh
+./scripts/install_macos.sh
+```
+
+See [docs/share-with-a-friend.md](docs/share-with-a-friend.md) for full instructions.
+
 On first launch, ActivityOS explains exactly what it records and requests consent. Closing the dashboard keeps the tray application running; use the tray menu to pause or quit. Launch-at-login is optional.
 
 Data is stored in the operating system’s standard local application-data directory:
