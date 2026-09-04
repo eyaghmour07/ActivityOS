@@ -93,6 +93,76 @@ std::size_t switchesDuring(
         }));
 }
 
+bool isProductiveSession(const Session& session) {
+    return session.productive && !session.distraction;
+}
+
+const Session* sessionBeforeSwitch(const std::vector<Session>& sessions,
+                                   UnixMillis timestamp) {
+    const Session* result = nullptr;
+    for (const auto& session : sessions) {
+        if (session.start_unix_ms < timestamp) {
+            result = &session;
+        }
+    }
+    return result;
+}
+
+const Session* sessionAfterSwitch(const std::vector<Session>& sessions,
+                                  UnixMillis timestamp) {
+    for (const auto& session : sessions) {
+        if (session.start_unix_ms >= timestamp) {
+            return &session;
+        }
+    }
+    return nullptr;
+}
+
+bool isDisruptiveSwitch(const ContextSwitch& item,
+                        const std::vector<Session>& sessions) {
+    if (item.previous_app == item.new_app) {
+        return false;
+    }
+    const Session* before = sessionBeforeSwitch(sessions, item.timestamp_unix_ms);
+    const Session* after = sessionAfterSwitch(sessions, item.timestamp_unix_ms);
+    if (!before || !after) {
+        return true;
+    }
+    return !(isProductiveSession(*before) && isProductiveSession(*after));
+}
+
+std::size_t disruptiveSwitchesDuring(
+    const Session& session,
+    const std::vector<ContextSwitch>& switches,
+    const std::vector<Session>& sessions) {
+    return static_cast<std::size_t>(std::count_if(
+        switches.begin(), switches.end(), [&](const ContextSwitch& item) {
+            return item.timestamp_unix_ms >= session.start_unix_ms &&
+                   item.timestamp_unix_ms < session.end_unix_ms &&
+                   isDisruptiveSwitch(item, sessions);
+        }));
+}
+
+std::vector<Session> mergeProductiveBlocks(const std::vector<Session>& sessions) {
+    std::vector<Session> blocks;
+    for (const auto& session : normalizedSessions(sessions)) {
+        if (!isProductiveSession(session)) {
+            continue;
+        }
+        if (blocks.empty() || blocks.back().end_unix_ms < session.start_unix_ms) {
+            blocks.push_back(session);
+            continue;
+        }
+        auto& block = blocks.back();
+        block.end_unix_ms = std::max(block.end_unix_ms, session.end_unix_ms);
+        block.active_duration_ms += sessionDuration(session);
+        if (block.app != session.app) {
+            block.app = "Mixed productive work";
+        }
+    }
+    return blocks;
+}
+
 double percentChange(double current, double baseline) {
     if (baseline == 0.0) {
         return current == 0.0 ? 0.0 : 100.0;
@@ -255,8 +325,8 @@ DailyMetrics AnalyticsEngine::dailyMetrics(
     }
 
     result.context_switch_count = static_cast<std::size_t>(std::count_if(
-        switches.begin(), switches.end(), [](const ContextSwitch& item) {
-            return item.previous_app != item.new_app;
+        switches.begin(), switches.end(), [&](const ContextSwitch& item) {
+            return isDisruptiveSwitch(item, normalized);
         }));
     result.switches_per_active_hour =
         contextSwitchesPerHour(normalized, switches);
@@ -340,11 +410,12 @@ std::vector<Session> AnalyticsEngine::focusSessions(
     const std::vector<Session>& sessions,
     const std::vector<ContextSwitch>& switches) const {
     std::vector<Session> result;
-    for (const auto& session : normalizedSessions(sessions)) {
-        if (session.productive && !session.distraction &&
-            sessionDuration(session) >= config_.focus_threshold_ms &&
-            switchesDuring(session, switches) <= config_.max_focus_switches) {
-            result.push_back(session);
+    const auto normalized = normalizedSessions(sessions);
+    for (const auto& block : mergeProductiveBlocks(normalized)) {
+        if (sessionDuration(block) >= config_.focus_threshold_ms &&
+            disruptiveSwitchesDuring(block, switches, normalized) <=
+                config_.max_focus_switches) {
+            result.push_back(block);
         }
     }
     return result;
@@ -354,11 +425,12 @@ std::vector<Session> AnalyticsEngine::deepWorkSessions(
     const std::vector<Session>& sessions,
     const std::vector<ContextSwitch>& switches) const {
     std::vector<Session> result;
-    for (const auto& session : normalizedSessions(sessions)) {
-        if (session.productive && !session.distraction &&
-            sessionDuration(session) >= config_.deep_work_threshold_ms &&
-            switchesDuring(session, switches) <= config_.max_deep_work_switches) {
-            result.push_back(session);
+    const auto normalized = normalizedSessions(sessions);
+    for (const auto& block : mergeProductiveBlocks(normalized)) {
+        if (sessionDuration(block) >= config_.deep_work_threshold_ms &&
+            disruptiveSwitchesDuring(block, switches, normalized) <=
+                config_.max_deep_work_switches) {
+            result.push_back(block);
         }
     }
     return result;
@@ -375,8 +447,8 @@ double AnalyticsEngine::contextSwitchesPerHour(
         return 0.0;
     }
     const auto valid_switches = std::count_if(
-        switches.begin(), switches.end(), [](const ContextSwitch& item) {
-            return item.previous_app != item.new_app;
+        switches.begin(), switches.end(), [&](const ContextSwitch& item) {
+            return isDisruptiveSwitch(item, normalizedSessions(sessions));
         });
     return static_cast<double>(valid_switches) * kHourMs /
            static_cast<double>(active_ms);

@@ -123,12 +123,13 @@ public:
     void deleteRange(storage::DateRange range);
     void deleteAllActivity();
 
+    [[nodiscard]] std::vector<Session> sessions(storage::DateRange range) const;
+    [[nodiscard]] std::vector<ContextSwitch> switches(storage::DateRange range) const;
+
 private:
     storage::Database& database_;
     AnalyticsEngine analytics_;
 
-    [[nodiscard]] std::vector<Session> sessions(storage::DateRange range) const;
-    [[nodiscard]] std::vector<ContextSwitch> switches(storage::DateRange range) const;
     [[nodiscard]] std::vector<IdlePeriod> idlePeriods(storage::DateRange range) const;
 };
 

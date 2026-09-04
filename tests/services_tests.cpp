@@ -90,6 +90,16 @@ int main() {
     const auto chatgpt = browserDatabase.applicationByName("ChatGPT");
     check(cursor && cursor->category == "Coding" && !cursor->is_distraction,
           "Cursor is classified as coding");
+
+    auto codeSource = std::make_unique<FakeActivitySource>(
+        std::vector<ActivitySnapshot>{snapshot("Code")});
+    TrackerService codeTracker(browserDatabase, std::move(codeSource));
+    codeTracker.poll(start - 60 * 1000);
+    codeTracker.shutdown(start);
+    const auto codeApp = browserDatabase.applicationByName("Code");
+    check(codeApp && codeApp->category == "Coding" && !codeApp->is_distraction,
+          "VS Code (Code) is classified as coding");
+
     check(chatgpt && chatgpt->category == "Research" && !chatgpt->is_distraction,
           "AI companion apps are classified as research");
 

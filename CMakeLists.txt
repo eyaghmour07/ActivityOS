@@ -95,6 +95,8 @@ qt_add_executable(ActivityOS
     src/app/main.cpp
     src/app/main_window.cpp
     src/app/main_window.hpp
+    src/app/ui_widgets.cpp
+    src/app/ui_widgets.hpp
     resources/activityos.qrc
     resources/icons/ActivityOS.icns
 )

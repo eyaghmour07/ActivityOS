@@ -27,8 +27,13 @@ std::pair<std::string, bool> defaultClassification(const std::string& applicatio
             return app.find(name) != std::string::npos;
         });
     };
+    if (app == "code" || app == "code.exe" || app == "code - insiders" ||
+        app == "code - insiders.exe") {
+        return {"Coding", false};
+    }
     if (containsAny({"cursor", "visual studio code", "vscode", "xcode", "terminal", "iterm",
-                     "visual studio", "intellij", "clion", "pycharm", "android studio"})) {
+                     "visual studio", "intellij", "clion", "pycharm", "android studio",
+                     "sublime text", "nova", "zed"})) {
         return {"Coding", false};
     }
     if (containsAny({"chatgpt", "claude", "gemini", "perplexity",

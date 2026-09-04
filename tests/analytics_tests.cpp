@@ -82,6 +82,28 @@ void testDistributionAndOverlapHandling() {
     assert(metrics.distraction_ms == 10 * minute);
 }
 
+void testProductiveSwitchPreservesFocus() {
+    AnalyticsConfig config;
+    config.focus_threshold_ms = 20 * minute;
+    config.max_focus_switches = 1;
+    AnalyticsEngine engine(config);
+    std::vector<Session> sessions{
+        makeSession("code", "Code", "Coding", 0, 15 * minute, true),
+        makeSession("docs", "Chrome", "Work", 15 * minute, 15 * minute, true),
+        makeSession("code2", "Code", "Coding", 30 * minute, 15 * minute, true),
+    };
+    std::vector<ContextSwitch> switches{
+        {"Code", "Chrome", 15 * minute},
+        {"Chrome", "Code", 30 * minute},
+    };
+    const auto focus = engine.focusSessions(sessions, switches);
+    assert(focus.size() == 1);
+    const auto metrics = engine.dailyMetrics(0, sessions, switches, {});
+    assert(metrics.focus_session_count == 1);
+    assert(metrics.focused_ms >= 44 * minute);
+    assert(metrics.context_switch_count == 0);
+}
+
 void testSessionStatisticsAndFocus() {
     AnalyticsConfig config;
     config.focus_threshold_ms = 20 * minute;
@@ -247,6 +269,7 @@ void testWeeklyTrendsAndInsights() {
 int main() {
     testEmptyAndInvalidInput();
     testDistributionAndOverlapHandling();
+    testProductiveSwitchPreservesFocus();
     testSessionStatisticsAndFocus();
     testTransitionsDistractionsAndIdle();
     testPeakBaselineScoreAndProfile();

@@ -33,10 +33,24 @@ chmod +x scripts/install_macos.sh
 
 Add your friend as a collaborator on GitHub, then they clone with their own GitHub account.
 
-## Updating later
+## Updating later (replace old version)
+
+The install script automatically removes the old app from `/Applications` before installing the new one. Your tracking data is **not** deleted — it lives in `~/Library/Application Support/ActivityOS/`, separate from the app.
 
 ```bash
-cd ActivityOS
+cd ActivityOS          # wherever you cloned it
 git pull
 ./scripts/install_macos.sh
 ```
+
+Optional cleanup (safe to delete):
+
+```bash
+# Old DMG from a previous download attempt
+rm -f ~/Downloads/ActivityOS*.dmg
+
+# Stray copy if you dragged the app to Desktop or Downloads
+rm -rf ~/Desktop/ActivityOS.app ~/Downloads/ActivityOS.app
+```
+
+After updating, quit and reopen ActivityOS. macOS may ask you to re-allow Chrome Automation or Screen Recording — that's normal.
