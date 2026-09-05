@@ -1439,11 +1439,11 @@ void MainWindow::refreshToday(const DashboardSnapshot& snapshot) {
             .arg(formatClockHour(timelineStart), formatClockHour(timelineEnd),
                  spanHours > 12.0 ? "  ·  scroll to see the full day" : ""));
 
-    std::unordered_map<std::string, std::int64_t> appMinutes;
+    std::unordered_map<std::string, std::int64_t> appMs;
     for (const auto& session : daySessions) {
-        appMinutes[session.app] += session.active_duration_ms / kMinuteMs;
+        appMs[session.app] += session.active_duration_ms;
     }
-    std::vector<std::pair<std::string, std::int64_t>> ranked(appMinutes.begin(), appMinutes.end());
+    std::vector<std::pair<std::string, std::int64_t>> ranked(appMs.begin(), appMs.end());
     std::sort(ranked.begin(), ranked.end(),
               [](const auto& left, const auto& right) { return left.second > right.second; });
     const auto topTotal = ranked.empty()
@@ -1453,7 +1453,7 @@ void MainWindow::refreshToday(const DashboardSnapshot& snapshot) {
                                                     return sum + item.second;
                                                 });
     std::vector<AppUsageRow> rows;
-    for (const auto& [name, minutes] : ranked) {
+    for (const auto& [name, ms] : ranked) {
         if (rows.size() >= 8) break;
         const auto category = std::find_if(daySessions.begin(), daySessions.end(),
                                            [&](const Session& session) {
@@ -1463,8 +1463,8 @@ void MainWindow::refreshToday(const DashboardSnapshot& snapshot) {
             category != daySessions.end() ? QString::fromStdString(category->category) : "Other";
         AppUsageRow row;
         row.name = QString::fromStdString(name);
-        row.minutes = static_cast<int>(minutes);
-        row.pct = topTotal > 0 ? static_cast<int>((minutes * 100) / topTotal) : 0;
+        row.minutes = static_cast<int>((ms + kMinuteMs / 2) / kMinuteMs);
+        row.pct = topTotal > 0 ? static_cast<int>((ms * 100) / topTotal) : 0;
         row.color = categoryBarColor(categoryName, category != daySessions.end() && category->distraction);
         rows.push_back(row);
     }
@@ -1530,7 +1530,7 @@ void MainWindow::refreshApps() {
     for (int row = 0; row < appsTable_->rowCount(); ++row) {
         const auto& [name, ms] = ranked[static_cast<std::size_t>(row)];
         const auto& sample = appSample.at(name);
-        const auto minutes = ms / kMinuteMs;
+        const auto minutes = (ms + kMinuteMs / 2) / kMinuteMs;
         const auto share = totalActive > 0 ? (ms * 100 / totalActive) : 0;
         const QString status =
             sample.distraction ? "distraction"
