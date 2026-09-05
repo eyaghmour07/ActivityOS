@@ -166,6 +166,30 @@ int main() {
               !overriddenChrome->is_distraction,
           "user browser rules override built-in title classification");
 
+    storage::Database lockDatabase = storage::Database::inMemory();
+    lockDatabase.migrate();
+    auto lockSource = std::make_unique<FakeActivitySource>(
+        std::vector<ActivitySnapshot>{snapshot("loginwindow"), snapshot("loginwindow"),
+                                      snapshot("Google Chrome")});
+    TrackerService lockTracker(lockDatabase, std::move(lockSource));
+    lockTracker.poll(start);
+    lockTracker.poll(start + 10 * 60 * 1000);
+    lockTracker.poll(start + 11 * 60 * 1000);
+    lockTracker.shutdown(start + 20 * 60 * 1000);
+    const storage::DateRange lockRange{start, start + 30 * 60 * 1000};
+    check(lockDatabase.isApplicationExcluded("loginwindow"),
+          "loginwindow is auto-excluded");
+    bool loginSession = false;
+    bool chromeSession = false;
+    const auto loginApp = lockDatabase.applicationByName("loginwindow");
+    const auto chromeApp = lockDatabase.applicationByName("Google Chrome");
+    for (const auto& session : lockDatabase.sessions(lockRange)) {
+        if (loginApp && session.application_id == loginApp->id) loginSession = true;
+        if (chromeApp && session.application_id == chromeApp->id) chromeSession = true;
+    }
+    check(!loginSession, "loginwindow does not create active sessions");
+    check(chromeSession, "real apps still create sessions after unlock");
+
     if (failures == 0) {
         std::cout << "All service tests passed.\n";
         return 0;

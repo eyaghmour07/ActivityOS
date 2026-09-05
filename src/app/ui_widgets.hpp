@@ -2,6 +2,7 @@
 
 #include <QColor>
 #include <QLabel>
+#include <QScrollArea>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -14,6 +15,7 @@ struct TimelineBlock {
     double endHour{};
     QString type;
     QString label;
+    QString tooltip;
 };
 
 struct AppUsageRow {
@@ -29,21 +31,26 @@ struct WeekDayBars {
     std::vector<std::pair<double, QColor>> segments;
 };
 
+class DayTimelineCanvas;
+
 class DayTimelineWidget final : public QWidget {
 public:
     explicit DayTimelineWidget(QWidget* parent = nullptr);
 
     void setRange(double startHour, double endHour);
     void setBlocks(std::vector<TimelineBlock> blocks);
+    void setNowHour(double nowHour);
 
 protected:
-    void paintEvent(QPaintEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
     QSize sizeHint() const override;
+    QSize minimumSizeHint() const override;
 
 private:
-    double startHour_{8.0};
-    double endHour_{18.0};
-    std::vector<TimelineBlock> blocks_;
+    void syncCanvasWidth();
+
+    QScrollArea* scroll_{};
+    DayTimelineCanvas* canvas_{};
 };
 
 class AppBreakdownWidget final : public QWidget {

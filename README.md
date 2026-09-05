@@ -1,40 +1,79 @@
 # ActivityOS
 
-ActivityOS is a local-first desktop application that measures application usage and turns it into explainable workstyle analytics. It tracks active applications and idle time—not keystrokes, screenshots, webcam data, or document contents.
+<img src="resources/icons/activityos.png" alt="ActivityOS icon" width="72" height="72">
 
-The app is built with C++20, Qt 6, and SQLite. It runs from the system tray and opens as a normal desktop dashboard.
+**Local-first desktop analytics for how you actually spend your workday.**
+
+ActivityOS tracks which applications you use and turns that into explainable focus metrics — sessions, distractions, baselines, and goals. Everything stays on your machine. No accounts, no cloud, no keylogging, no screenshots.
+
+Built with **C++20**, **Qt 6**, and **SQLite**.
+
+![Today dashboard](docs/screenshots/today.png)
+
+## Why it exists
+
+Most productivity tools either invade privacy or give you opaque scores. ActivityOS is built for personal reflection:
+
+- Records **foreground app + idle time** only
+- Stores data in a local SQLite database you control
+- Scores and recommendations are **deterministic and explainable**
+- Optional demo data so you can explore the UI without waiting for history
 
 ## Features
 
-- Native foreground-application and idle detection for macOS, Windows, and Linux/X11
+- Native foreground-app and idle detection (macOS, Windows, Linux/X11)
 - Session, workday, and context-switch detection
-- User-editable application and optional window-title classification rules
-- Browser-aware classification that separates common study/development sites from streaming distractions
-- Local SQLite history with safe migrations, transactions, and retention cleanup
-- Daily and weekly activity summaries
-- Focus and deep-work detection
-- Distraction severity, recovery time, and estimated distraction cost
-- Session distributions, common transitions, peak hours, and work-type distribution
-- Personal 14-day baselines, comparisons, trends, and workstyle profile
-- Explainable, configurable productivity scoring
-- Goals, productivity experiments, and deterministic recommendations
-- CSV/JSON export, pause, exclusions, date-range deletion, and delete-all
-- Safe synthetic demo data for exploring every dashboard
+- Browser-aware classification (study / work sites vs streaming distractions)
+- Editable classification rules
+- Daily timeline with hover details, app breakdown, focus sessions, trends
+- 14-day baselines, workstyle profile, and productivity scoring
+- Goals, experiments, CSV/JSON export, pause, exclusions, and delete controls
 
-The optional AI narration layer from the PRD is intentionally not included.
+## Status
 
-## Requirements
+| Platform | Status |
+|----------|--------|
+| **macOS (Apple Silicon)** | Primary target — install script + dashboard polish |
+| Windows | Builds and tracks; packaging less polished |
+| Linux/X11 | Supported |
+| Linux/Wayland | Limited — OS often blocks global window inspection |
 
-- CMake 3.24+
-- A C++20 compiler
-- Qt 6.5+ with Core, Gui, and Widgets
-- SQLite 3 development files
-- Linux only: X11 and XScreenSaver development files
+Downloaded DMGs can hit macOS Gatekeeper. Prefer building from source (below).
 
-### macOS
+## Quick start (macOS)
 
 ```sh
 brew install cmake qt
+git clone https://github.com/eyaghmour07/ActivityOS.git
+cd ActivityOS
+chmod +x scripts/install_macos.sh
+./scripts/install_macos.sh
+```
+
+That builds ActivityOS and installs it to `/Applications`. Full friend-share notes: [docs/share-with-a-friend.md](docs/share-with-a-friend.md).
+
+### Update later
+
+```sh
+cd ActivityOS
+git pull
+./scripts/install_macos.sh
+```
+
+## Build and test
+
+```sh
+cmake --preset default
+cmake --build --preset default
+ctest --preset default
+```
+
+Custom Qt path:
+
+```sh
+cmake -S . -B build -DCMAKE_PREFIX_PATH=/path/to/Qt
+cmake --build build
+ctest --test-dir build --output-on-failure
 ```
 
 ### Ubuntu/Debian
@@ -45,71 +84,21 @@ sudo apt install cmake g++ qt6-base-dev libsqlite3-dev libx11-dev libxss-dev
 
 ### Windows
 
-Install Qt 6, CMake, Visual Studio 2022 with the Desktop C++ workload, and SQLite development files. Set `CMAKE_PREFIX_PATH` to the Qt installation if CMake cannot locate it.
+Install Qt 6, CMake, Visual Studio 2022 (Desktop C++), and SQLite. Set `CMAKE_PREFIX_PATH` if needed.
 
-## Build and test
+## Privacy
 
-```sh
-cmake --preset default
-cmake --build --preset default
-ctest --preset default
-```
+- **Recorded:** app names, transitions, idle duration, derived metrics, your rules/goals
+- **Not recorded:** keystrokes, screenshots, webcam, file/page contents, cloud sync
+- Window titles are inspected only when needed for classification and are **not stored by default**
 
-If Qt is installed in a custom location:
+Details: [docs/privacy.md](docs/privacy.md) · metric definitions: [docs/metrics.md](docs/metrics.md)
 
-```sh
-cmake -S . -B build -DCMAKE_PREFIX_PATH=/path/to/Qt
-cmake --build build
-ctest --test-dir build --output-on-failure
-```
-
-## Run
-
-macOS:
-
-```sh
-open build/ActivityOS.app
-```
-
-Windows:
-
-```powershell
-.\build\Debug\ActivityOS.exe
-```
-
-Linux:
-
-```sh
-./build/ActivityOS
-```
-
-## Share with a friend (macOS)
-
-Downloaded installers are often blocked by macOS Gatekeeper. The reliable approach is to build on their Mac:
-
-```sh
-git clone https://github.com/eyaghmour07/ActivityOS.git
-cd ActivityOS
-chmod +x scripts/install_macos.sh
-./scripts/install_macos.sh
-```
-
-See [docs/share-with-a-friend.md](docs/share-with-a-friend.md) for full instructions.
-
-On first launch, ActivityOS explains exactly what it records and requests consent. Closing the dashboard keeps the tray application running; use the tray menu to pause or quit. Launch-at-login is optional.
-
-Data is stored in the operating system’s standard local application-data directory:
+Data location:
 
 - macOS: `~/Library/Application Support/ActivityOS/ActivityOS/activityos.db`
 - Windows: `%LOCALAPPDATA%/ActivityOS/ActivityOS/activityos.db`
 - Linux: `~/.local/share/ActivityOS/ActivityOS/activityos.db`
-
-## Platform notes
-
-- **macOS:** Foreground application and idle duration use AppKit and CoreGraphics. Chrome tab sites are read via Apple Automation when allowed; other browsers fall back to window titles. URLs and titles are not persisted by default.
-- **Windows:** Foreground application and idle duration use Win32 APIs.
-- **Linux/X11:** Active-window metadata uses EWMH/X11 and idle duration uses XScreenSaver.
-- **Linux/Wayland:** Global active-window inspection is intentionally restricted by many compositors. ActivityOS reports this limitation instead of recording misleading data; an X11/XWayland session is currently required.
 
 ## Architecture
 
@@ -121,20 +110,12 @@ Native OS adapter
   → Qt desktop dashboard
 ```
 
-The layers are independent:
+- [`include/activityos/activity_source.hpp`](include/activityos/activity_source.hpp) — native tracking contract
+- [`include/activityos/storage.hpp`](include/activityos/storage.hpp) — SQLite + privacy ops
+- [`include/activityos/analytics.hpp`](include/activityos/analytics.hpp) — workstyle metrics
+- [`include/activityos/services.hpp`](include/activityos/services.hpp) — orchestration
+- [`src/app`](src/app) — Qt dashboard, tray, settings, goals
 
-- [`include/activityos/activity_source.hpp`](include/activityos/activity_source.hpp): native tracking contract and test fake
-- [`include/activityos/storage.hpp`](include/activityos/storage.hpp): SQLite repositories and privacy operations
-- [`include/activityos/analytics.hpp`](include/activityos/analytics.hpp): deterministic workstyle metrics
-- [`include/activityos/services.hpp`](include/activityos/services.hpp): tracker and dashboard orchestration
-- [`src/app`](src/app): Qt dashboard, tray, onboarding, settings, goals, and experiments
+## License
 
-See [`docs/metrics.md`](docs/metrics.md) for definitions and formulas and [`docs/privacy.md`](docs/privacy.md) for the data policy.
-
-## Package
-
-```sh
-cmake --build build --target package
-```
-
-This creates a DMG on macOS, an NSIS installer on Windows when NSIS is installed, and a compressed package on Linux.
+MIT — see [LICENSE](LICENSE).

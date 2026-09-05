@@ -20,6 +20,62 @@ bool containsInsensitive(const std::string& value, const std::string& pattern) {
     return pattern.empty() || lower(value).find(lower(pattern)) != std::string::npos;
 }
 
+bool isNonUserSystemApplication(const std::string& application) {
+    const auto app = lower(application);
+    static constexpr const char* kIgnored[] = {
+        "loginwindow",
+        "login window",
+        "screensaverengine",
+        "screen saver",
+        "screensaver",
+        "windowserver",
+        "dock",
+        "control center",
+        "controlcentre",
+        "notification center",
+        "notificationcentre",
+        "systemuiserver",
+        "spotlight",
+        "usernotificationcenter",
+        "coreservicesuiagent",
+        "securityagent",
+        "universalaccessauthwarn",
+        "airplayuiagent",
+        "viewbridgeauxiliary",
+        "wallpaper",
+        "wallpaperagent",
+        "lockscreenui",
+        "lock screen",
+        "screencaptureui",
+        "powerchime",
+        "coreautha",
+        "authbrokeragent",
+    };
+    return std::any_of(std::begin(kIgnored), std::end(kIgnored), [&](const char* name) {
+        return app == name;
+    });
+}
+
+void seedIgnoredSystemExclusions(storage::Database& database) {
+    static constexpr const char* kSeed[] = {
+        "loginwindow",
+        "Login Window",
+        "ScreenSaverEngine",
+        "WindowServer",
+        "Dock",
+        "Control Center",
+        "Notification Center",
+        "SystemUIServer",
+        "Spotlight",
+        "UserNotificationCenter",
+        "SecurityAgent",
+        "lockscreenUI",
+    };
+    for (const char* name : kSeed) {
+        database.excludeApplication(name);
+    }
+}
+
 std::pair<std::string, bool> defaultClassification(const std::string& application) {
     const auto app = lower(application);
     const auto containsAny = [&](std::initializer_list<const char*> names) {
@@ -200,6 +256,7 @@ TrackerService::TrackerService(storage::Database& database,
     if (!source_) {
         throw std::invalid_argument("TrackerService requires an activity source");
     }
+    seedIgnoredSystemExclusions(database_);
 }
 
 TrackerService::~TrackerService() {
@@ -286,10 +343,19 @@ TrackerStatus TrackerService::poll(std::int64_t now_unix_ms) {
     status_.message = snapshot.metadata.error_message;
     if (snapshot.metadata.status == ActivitySourceStatus::unsupported ||
         snapshot.metadata.status == ActivitySourceStatus::error ||
-        snapshot.application_name.empty()) {
+        snapshot.application_name.empty() ||
+        isNonUserSystemApplication(snapshot.application_name)) {
         closeCurrent(now_unix_ms);
         status_.active_application.clear();
         status_.active_category.clear();
+        // Lock screen / loginwindow should count as idle time, not app usage.
+        if (isNonUserSystemApplication(snapshot.application_name)) {
+            if (!idle_started_ms_) {
+                idle_started_ms_ = now_unix_ms;
+                recordEvent(std::nullopt, now_unix_ms, "IDLE_START");
+            }
+            status_.idle = true;
+        }
         return status_;
     }
 
