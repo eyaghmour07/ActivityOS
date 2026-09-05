@@ -6,7 +6,7 @@
 
 **Local-first desktop analytics for how you actually spend your workday.**
 
-ActivityOS tracks which applications you use and turns that into explainable focus metrics — sessions, distractions, baselines, and goals. Everything stays on your machine. No accounts, no cloud, no keylogging, no screenshots.
+ActivityOS tracks which applications you use and turns that into explainable focus metrics: sessions, distractions, baselines, and goals. Everything stays on your machine. No accounts, no cloud, no keylogging, no screenshots.
 
 Built with **C++20**, **Qt 6**, and **SQLite**.
 
