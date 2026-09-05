@@ -32,26 +32,31 @@ Most productivity tools either invade privacy or give you an opaque score. Activ
 
 ## Design decisions
 
-I chose **C++20 and Qt 6** because this is a tray-resident tracker that should stay cheap while you work in other apps. A web stack would have been faster to skin, but it would also mean a Chromium process sitting in the dock all day. Qt gives one native UI and system-tray story across macOS, Windows, and Linux, talks cleanly to SQLite, and lets the OS adapters stay in the language the platform APIs already speak (Objective-C++ on macOS, Win32, X11).
+I chose **C++20 and Qt 6** because this is a tray-resident tracker that should stay cheap *while you are not looking at it*. Qt is one process and one UI toolkit — not a Chromium renderer, GPU process, and helper sitting in the dock. That is the argument, and it is about architecture and idle CPU, not about winning a RAM contest against Electron when the dashboard is on screen. Bundled Qt Widgets still cost on the order of a hundred megabytes; see Performance.
 
 Scoring is **deterministic on purpose**. There is no model, no embeddings, no “AI insight” layer. Focus blocks, distraction cost, and the 0–100 score are formulas you can read in [`docs/metrics.md`](docs/metrics.md) and step through in tests. That is slower to look magical and faster to trust: if the number is wrong, you can find the branch. An ML classifier would hide the same mistakes behind a confidence score I could not explain in a code review.
 
-The tradeoff I actually hit: **shipping a Qt app on macOS is harder than writing the analytics.** A CMake binary links Homebrew Qt; a `.app` you drag to `/Applications` has to bundle those frameworks or it dies at launch (“quit unexpectedly”) when two Qt copies load. `macdeployqt` plus ad-hoc codesign is the path that works. A downloaded DMG still gets Gatekeeper-quarantined, so v0.1 ships as source plus an install script rather than a fake one-click installer. That is the honest cost of picking native C++ over Electron.
+**Why not ActivityWatch?** It is the obvious prior art: open-source, local-first, cross-platform time tracking. I did not start from it because I wanted a native C++/Qt process and a scored, explainable workstyle layer (focus blocks, baselines, goals) rather than a Python/web stack and raw time buckets. Building it was the point of the project; using ActivityWatch would have been the right choice if the goal was only “log which app is focused.”
+
+The tradeoff I actually hit: **shipping a Qt app on macOS is harder than writing the analytics.** A CMake binary links Homebrew Qt; a `.app` you drag to `/Applications` has to bundle those frameworks or it dies at launch (“quit unexpectedly”) when two Qt copies load. `macdeployqt` plus ad-hoc codesign is the path that works. A downloaded DMG still gets Gatekeeper-quarantined, so [v0.1.0](https://github.com/eyaghmour07/ActivityOS/releases/tag/v0.1.0) is a source tag plus an install script, not a fake one-click installer.
 
 ## Performance
 
-Measured on an Apple Silicon Mac, dashboard open, tracker running (`2026-09-05`):
+Measured on an Apple Silicon Mac (`2026-09-05`), same process, tracker polling every 5 s.
 
 | Metric | Measured |
 | --- | --- |
 | Sampling interval | **5 s** foreground poll · **60 s** heartbeat · **30 s** UI refresh |
 | Idle threshold | **5 min** of OS-reported idle before a session closes |
-| RSS | **164–193 MiB** (8 samples over 20 s; one jump when the window woke) |
-| CPU | **~0%** between polls · **6.2%** brief spike · **0.8%** average over the same window |
-| Database | **276 KiB** main file after 3 days of live use (736 sessions, 975 events) |
-| Growth | **~90 KiB/day** on that live window → **~0.6 MiB/week** at the same density |
+| RSS (dashboard open) | **167 MiB** (12 samples / 60 s, range 166.5–166.8) |
+| RSS (tray only, window closed) | **167 MiB immediately**, then **~84–110 MiB** as the hidden UI is paged (60 samples / 5 min so far) |
+| CPU (dashboard open, 60 s) | **0.0%** average and max (`ps` 5 s interval) |
+| CPU (tray only, 5 min) | **~0%** most samples · **1.0%** on the first sample after close |
+| Database (live, 3 days) | **276 KiB** main file · 736 sessions · 975 events — a week of growth is **not measured yet**; do not treat 3 days as a weekly rate |
 
-Demo data adds more sessions (840 sessions / 13-day span in this copy) and a WAL file until SQLite checkpoints; the weekly figure above is from live tracking only, not the synthetic load.
+The tray number is the one that matches the C++/Qt claim. Closing the window does not unload Qt; RSS stays at dashboard size until the OS reclaims the hidden widgets, then it drops. That is still one process and no Chromium — but it is not a 30 MiB daemon, and I would not pretend otherwise in an interview.
+
+Demo data in this copy adds sessions (840 / 13-day span) and a WAL file until SQLite checkpoints; the 276 KiB figure is the live window before that load.
 
 ## Status
 
@@ -62,7 +67,7 @@ Demo data adds more sessions (840 sessions / 13-day span in this copy) and a WAL
 | Linux/X11 | Supported |
 | Linux/Wayland | Limited — compositors often block global window inspection |
 
-v0.1 is a **source release**. Build it on the machine that will run it; that avoids Gatekeeper quarantine.
+**[v0.1.0](https://github.com/eyaghmour07/ActivityOS/releases/tag/v0.1.0)** is a tagged source release (zip/tarball on GitHub). Build it on the machine that will run it; that avoids Gatekeeper quarantine.
 
 ## Quick start (macOS)
 
@@ -84,7 +89,7 @@ cmake --build --preset default
 ctest --preset default
 ```
 
-CI runs the same four suites (**analytics**, **storage**, **activity source**, **services**) on macOS, Ubuntu, and Windows. They currently pass in **0.8 s** locally. There is no line-coverage gate yet; the suites cover classification (including VS Code / Chrome / lock-screen), sessionization, migrations, and dashboard aggregation.
+CI runs the same four suites (**analytics**, **storage**, **activity source**, **services**) on macOS, Ubuntu, and Windows. There is no line-coverage gate yet; the suites cover classification (including VS Code / Chrome / lock-screen), sessionization, migrations, and dashboard aggregation.
 
 ### Ubuntu/Debian
 
