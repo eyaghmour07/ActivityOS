@@ -104,6 +104,65 @@ void testProductiveSwitchPreservesFocus() {
     assert(metrics.context_switch_count == 0);
 }
 
+void testShortGapAndGlancesPreserveFocus() {
+    AnalyticsConfig config;
+    config.focus_threshold_ms = 20 * minute;
+    config.max_focus_switches = 1;
+    AnalyticsEngine engine(config);
+
+    const auto gapped = engine.focusSessions(
+        {
+            makeSession("a", "Cursor", "Coding", 0, 15 * minute, true),
+            makeSession("b", "Code", "Coding", 15 * minute + 90 * 1000, 15 * minute, true),
+        },
+        {});
+    assert(gapped.size() == 1);
+    assert(gapped[0].active_duration_ms == 30 * minute);
+
+    std::vector<Session> chromeGlance{
+        makeSession("c1", "Cursor", "Coding", 0, 20 * minute, true),
+        makeSession("ch", "Google Chrome", "General", 20 * minute, 90 * 1000, false),
+        makeSession("c2", "Cursor", "Coding", 20 * minute + 90 * 1000, 20 * minute, true),
+    };
+    std::vector<ContextSwitch> chromeSwitches{
+        {"Cursor", "Google Chrome", 20 * minute},
+        {"Google Chrome", "Cursor", 20 * minute + 90 * 1000},
+    };
+    const auto afterChrome = engine.focusSessions(chromeGlance, chromeSwitches);
+    assert(afterChrome.size() == 1);
+    assert(afterChrome[0].active_duration_ms == 40 * minute);
+    const auto chromeMetrics = engine.dailyMetrics(0, chromeGlance, chromeSwitches, {});
+    assert(chromeMetrics.context_switch_count == 0);
+    assert(chromeMetrics.focused_ms == 40 * minute);
+
+    std::vector<Session> slackGlance{
+        makeSession("s1", "Cursor", "Coding", 0, 25 * minute, true),
+        makeSession("sl", "Slack", "Communication", 25 * minute, 90 * 1000, false),
+        makeSession("s2", "Cursor", "Coding", 25 * minute + 90 * 1000, 20 * minute, true),
+    };
+    std::vector<ContextSwitch> slackSwitches{
+        {"Cursor", "Slack", 25 * minute},
+        {"Slack", "Cursor", 25 * minute + 90 * 1000},
+    };
+    const auto afterSlack = engine.focusSessions(slackGlance, slackSwitches);
+    assert(afterSlack.size() == 1);
+    assert(afterSlack[0].active_duration_ms == 45 * minute);
+
+    std::vector<Session> longChrome{
+        makeSession("l1", "Cursor", "Coding", 0, 20 * minute, true),
+        makeSession("yt", "Google Chrome", "General", 20 * minute, 5 * minute, false),
+        makeSession("l2", "Cursor", "Coding", 25 * minute, 20 * minute, true),
+    };
+    assert(engine.focusSessions(longChrome, {}).size() == 2);
+
+    std::vector<Session> video{
+        makeSession("v1", "Cursor", "Coding", 0, 20 * minute, true),
+        makeSession("vid", "YouTube", "Entertainment", 20 * minute, 90 * 1000, false, true),
+        makeSession("v2", "Cursor", "Coding", 20 * minute + 90 * 1000, 20 * minute, true),
+    };
+    assert(engine.focusSessions(video, {}).size() == 2);
+}
+
 void testSessionStatisticsAndFocus() {
     AnalyticsConfig config;
     config.focus_threshold_ms = 20 * minute;
@@ -270,6 +329,7 @@ int main() {
     testEmptyAndInvalidInput();
     testDistributionAndOverlapHandling();
     testProductiveSwitchPreservesFocus();
+    testShortGapAndGlancesPreserveFocus();
     testSessionStatisticsAndFocus();
     testTransitionsDistractionsAndIdle();
     testPeakBaselineScoreAndProfile();

@@ -93,8 +93,31 @@ std::size_t switchesDuring(
         }));
 }
 
+constexpr std::int64_t kFocusMergeGapMs = 2 * 60 * 1000;
+constexpr std::int64_t kSoftGlanceMaxMs = 2 * 60 * 1000;
+
 bool isProductiveSession(const Session& session) {
     return session.productive && !session.distraction;
+}
+
+bool isSoftGlance(const Session& session) {
+    if (isProductiveSession(session) || session.distraction) {
+        return false;
+    }
+    if (session.category == "Entertainment") {
+        return false;
+    }
+    return sessionDuration(session) > 0 && sessionDuration(session) <= kSoftGlanceMaxMs;
+}
+
+void extendBlockWith(Session& block, const Session& session, bool count_active) {
+    block.end_unix_ms = std::max(block.end_unix_ms, session.end_unix_ms);
+    if (count_active) {
+        block.active_duration_ms += sessionDuration(session);
+    }
+    if (block.app != session.app && isProductiveSession(session)) {
+        block.app = "Mixed productive work";
+    }
 }
 
 const Session* sessionBeforeSwitch(const std::vector<Session>& sessions,
@@ -128,7 +151,15 @@ bool isDisruptiveSwitch(const ContextSwitch& item,
     if (!before || !after) {
         return true;
     }
-    return !(isProductiveSession(*before) && isProductiveSession(*after));
+    if (isProductiveSession(*before) && isProductiveSession(*after)) {
+        return false;
+    }
+    if ((isProductiveSession(*before) && isSoftGlance(*after)) ||
+        (isSoftGlance(*before) && isProductiveSession(*after)) ||
+        (isSoftGlance(*before) && isSoftGlance(*after))) {
+        return false;
+    }
+    return true;
 }
 
 std::size_t disruptiveSwitchesDuring(
@@ -143,22 +174,53 @@ std::size_t disruptiveSwitchesDuring(
         }));
 }
 
+bool canAttach(const Session& block, UnixMillis next_start) {
+    return next_start <= block.end_unix_ms + kFocusMergeGapMs;
+}
+
 std::vector<Session> mergeProductiveBlocks(const std::vector<Session>& sessions) {
+    const auto normalized = normalizedSessions(sessions);
     std::vector<Session> blocks;
-    for (const auto& session : normalizedSessions(sessions)) {
-        if (!isProductiveSession(session)) {
+    for (std::size_t i = 0; i < normalized.size();) {
+        const auto& session = normalized[i];
+        if (isProductiveSession(session)) {
+            if (blocks.empty() || !canAttach(blocks.back(), session.start_unix_ms)) {
+                blocks.push_back(session);
+            } else {
+                extendBlockWith(blocks.back(), session, true);
+            }
+            ++i;
             continue;
         }
-        if (blocks.empty() || blocks.back().end_unix_ms < session.start_unix_ms) {
-            blocks.push_back(session);
-            continue;
+
+        if (!blocks.empty() && isSoftGlance(session) &&
+            canAttach(blocks.back(), session.start_unix_ms)) {
+            std::int64_t glance_ms = 0;
+            std::size_t j = i;
+            UnixMillis run_end = blocks.back().end_unix_ms;
+            while (j < normalized.size() && isSoftGlance(normalized[j])) {
+                if (normalized[j].start_unix_ms > run_end + kFocusMergeGapMs) {
+                    break;
+                }
+                glance_ms += sessionDuration(normalized[j]);
+                if (glance_ms > kSoftGlanceMaxMs) {
+                    break;
+                }
+                run_end = std::max(run_end, normalized[j].end_unix_ms);
+                ++j;
+            }
+            const bool returned_to_work =
+                j < normalized.size() && isProductiveSession(normalized[j]) &&
+                glance_ms > 0 && glance_ms <= kSoftGlanceMaxMs &&
+                canAttach(blocks.back(), normalized[i].start_unix_ms) &&
+                normalized[j].start_unix_ms <= run_end + kFocusMergeGapMs;
+            if (returned_to_work) {
+                blocks.back().end_unix_ms = std::max(blocks.back().end_unix_ms, run_end);
+                i = j;
+                continue;
+            }
         }
-        auto& block = blocks.back();
-        block.end_unix_ms = std::max(block.end_unix_ms, session.end_unix_ms);
-        block.active_duration_ms += sessionDuration(session);
-        if (block.app != session.app) {
-            block.app = "Mixed productive work";
-        }
+        ++i;
     }
     return blocks;
 }
