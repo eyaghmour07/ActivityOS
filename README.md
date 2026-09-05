@@ -32,7 +32,7 @@ Most productivity tools either invade privacy or give you an opaque score. Activ
 
 ## Design decisions
 
-I chose **C++20 and Qt 6** because this is a tray-resident tracker that should stay cheap *while you are not looking at it*. Qt is one process and one UI toolkit — not a Chromium renderer, GPU process, and helper sitting in the dock. That is the argument, and it is about architecture and idle CPU, not about winning a RAM contest against Electron when the dashboard is on screen. Bundled Qt Widgets still cost on the order of a hundred megabytes; see Performance.
+I chose **C++20 and Qt 6** because this is a tray-resident tracker that should stay cheap *while you are not looking at it*. Qt is one process and one UI toolkit — not a Chromium renderer, GPU process, and helper sitting in the dock. That is the argument, and it is about architecture and idle CPU, not about winning a RAM contest against Electron when the dashboard is on screen. Bundled Qt Widgets still cost on the order of a hundred megabytes; see Performance. Tauri avoids Chromium too (system webview), but the OS adapters — foreground window and idle time — would still have been native code behind an FFI boundary, at which point the native app is the simpler artifact.
 
 Scoring is **deterministic on purpose**. There is no model, no embeddings, no “AI insight” layer. Focus blocks, distraction cost, and the 0–100 score are formulas you can read in [`docs/metrics.md`](docs/metrics.md) and step through in tests. That is slower to look magical and faster to trust: if the number is wrong, you can find the branch. An ML classifier would hide the same mistakes behind a confidence score I could not explain in a code review.
 
@@ -49,12 +49,11 @@ Measured on an Apple Silicon Mac (`2026-09-05`), same process, tracker polling e
 | Sampling interval | **5 s** foreground poll · **60 s** heartbeat · **30 s** UI refresh |
 | Idle threshold | **5 min** of OS-reported idle before a session closes |
 | RSS (dashboard open) | **167 MiB** (12 samples / 60 s, range 166.5–166.8) |
-| RSS (tray only, window closed) | **167 MiB immediately**, then **~84–110 MiB** as the hidden UI is paged (60 samples / 5 min so far) |
-| CPU (dashboard open, 60 s) | **0.0%** average and max (`ps` 5 s interval) |
-| CPU (tray only, 5 min) | **~0%** most samples · **1.0%** on the first sample after close |
+| RSS (tray only, window closed) | **~80 MiB between polls**, **~120 MiB after a 5 s sample** (10 min sit; pages come back when the tracker runs) |
+| CPU | **`ps` %CPU is 0.1% resolution** — most 5 s samples read **0.0** because a poll does too little work to register. Over 10 min tray-only: **0.15% average**, **7.6% max** on a sample that coincided with work |
 | Database (live, 3 days) | **276 KiB** main file · 736 sessions · 975 events — a week of growth is **not measured yet**; do not treat 3 days as a weekly rate |
 
-The tray number is the one that matches the C++/Qt claim. Closing the window does not unload Qt; RSS stays at dashboard size until the OS reclaims the hidden widgets, then it drops. That is still one process and no Chromium — but it is not a 30 MiB daemon, and I would not pretend otherwise in an interview.
+Closing the window does not unload Qt. RSS stays at dashboard size for a few minutes, then the compressor drops it; the next tracker poll faults pages back in. That is still one process and no Chromium — and it is not a 30 MiB daemon.
 
 Demo data in this copy adds sessions (840 / 13-day span) and a WAL file until SQLite checkpoints; the 276 KiB figure is the live window before that load.
 
