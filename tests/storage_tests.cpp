@@ -6,13 +6,26 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 using namespace activityos::storage;
 
 int main() {
     Database db = Database::inMemory();
     assert(db.isOpen());
+    assert(db.appliedMigrations().empty());
     db.migrate();
+
+    // The schema comes only from resources/migrations/*.sql, applied in order.
+    const auto built_in = builtInMigrations();
+    assert(!built_in.empty());
+    assert(built_in.front().version == 1);
+    assert(built_in.front().name == "001_initial");
+    std::vector<int> built_in_versions;
+    for (const auto& migration : built_in) built_in_versions.push_back(migration.version);
+    assert(db.appliedMigrations() == built_in_versions);
+    db.migrate();
+    assert(db.appliedMigrations() == built_in_versions);
 
     db.setSetting("idle_threshold_seconds", "300");
     assert(db.setting("idle_threshold_seconds") == "300");
@@ -144,6 +157,64 @@ int main() {
     assert(db.goals().empty());
     assert(db.experiments().empty());
     assert(db.insights(first_hour).empty());
+
+    // A later migration applies on top of an existing v0.1 database, which is
+    // 001_initial plus the user's data, and leaves that data in place.
+    Database legacy = Database::inMemory();
+    legacy.migrate(built_in.first(1));
+    assert(legacy.appliedMigrations() == std::vector<int>{1});
+    Application editor;
+    editor.name = "Xcode";
+    editor.category = "Coding";
+    editor.created_at = 100;
+    const auto editor_id = legacy.upsertApplication(editor);
+    legacy.addSession({0, editor_id, "Coding", 1'000, 3'000, 2'000, 0, 0, false, false});
+
+    const Migration add_notes{
+        2, "002_session_notes",
+        "ALTER TABLE sessions ADD COLUMN notes TEXT NOT NULL DEFAULT '';"
+        "INSERT INTO settings(key,value,updated_at) VALUES('migration_probe','2',0);"};
+    // Passed out of order on purpose; migrations run by version.
+    const std::vector<Migration> with_notes{add_notes, built_in.front()};
+    legacy.migrate(with_notes);
+    assert((legacy.appliedMigrations() == std::vector<int>{1, 2}));
+    assert(legacy.setting("migration_probe") == "2");
+    assert(legacy.sessions({0, 5'000}).size() == 1);
+    assert(legacy.applicationByName("Xcode")->id == editor_id);
+    // Applying again must skip 002: adding the column twice would fail.
+    legacy.migrate(with_notes);
+    assert((legacy.appliedMigrations() == std::vector<int>{1, 2}));
+
+    // A fresh database gets the same result from the full list.
+    Database fresh = Database::inMemory();
+    fresh.migrate(with_notes);
+    assert((fresh.appliedMigrations() == std::vector<int>{1, 2}));
+
+    // A failing migration is rolled back completely and is not recorded.
+    const Migration broken{
+        3, "003_broken",
+        "INSERT INTO settings(key,value,updated_at) VALUES('half_applied','1',0);"
+        "INSERT INTO missing_table(value) VALUES(1);"};
+    const std::vector<Migration> with_broken{built_in.front(), add_notes, broken};
+    bool broken_migration_reported = false;
+    try {
+        legacy.migrate(with_broken);
+    } catch (const std::runtime_error& error) {
+        broken_migration_reported =
+            std::string(error.what()).find("003_broken") != std::string::npos;
+    }
+    assert(broken_migration_reported);
+    assert((legacy.appliedMigrations() == std::vector<int>{1, 2}));
+    assert(!legacy.setting("half_applied"));
+
+    bool duplicate_version_rejected = false;
+    try {
+        const std::vector<Migration> duplicated{built_in.front(), add_notes, add_notes};
+        legacy.migrate(duplicated);
+    } catch (const std::invalid_argument&) {
+        duplicate_version_rejected = true;
+    }
+    assert(duplicate_version_rejected);
 
     std::cout << "ActivityOS storage tests passed\n";
     return 0;

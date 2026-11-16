@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -109,6 +110,17 @@ struct Insight {
     bool dismissed{};
 };
 
+// One schema migration. `version` comes from the numeric prefix of the file in
+// resources/migrations/ ("002_add_notes.sql" is version 2).
+struct Migration {
+    int version{};
+    std::string_view name;
+    std::string_view sql;
+};
+
+// The migrations embedded from resources/migrations/ at build time, in version order.
+[[nodiscard]] std::span<const Migration> builtInMigrations();
+
 class Database {
 public:
     explicit Database(const std::string& path);
@@ -123,7 +135,12 @@ public:
     [[nodiscard]] bool isOpen() const noexcept;
     [[nodiscard]] sqlite3* nativeHandle() noexcept;
 
-    void migrate(std::string_view migration_sql = {});
+    // Applies every migration that schema_migrations does not record yet, in
+    // version order. Each one runs in its own transaction and is rolled back
+    // if it fails.
+    void migrate();
+    void migrate(std::span<const Migration> migrations);
+    [[nodiscard]] std::vector<int> appliedMigrations() const;
     void beginTransaction();
     void commit();
     void rollback() noexcept;

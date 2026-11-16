@@ -38,14 +38,19 @@ add_library(activityos_analytics
 )
 target_include_directories(activityos_analytics PUBLIC include)
 
+include(cmake/EmbedMigrations.cmake)
+set(ACTIVITYOS_MIGRATIONS_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/generated/migrations.cpp")
+activityos_embed_migrations(
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/migrations"
+    "${ACTIVITYOS_MIGRATIONS_SOURCE}"
+)
+
 add_library(activityos_storage
     src/storage/storage.cpp
+    "${ACTIVITYOS_MIGRATIONS_SOURCE}"
 )
 target_include_directories(activityos_storage PUBLIC include)
 target_link_libraries(activityos_storage PUBLIC ${ACTIVITYOS_SQLITE_TARGET})
-target_compile_definitions(activityos_storage PRIVATE
-    ACTIVITYOS_MIGRATIONS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/resources/migrations"
-)
 
 set(ACTIVITYOS_PLATFORM_SOURCE
     src/platform/activity_source.cpp
