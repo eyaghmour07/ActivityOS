@@ -1,5 +1,7 @@
 #include "activityos/activity_source.hpp"
 
+// Keep assert() active in Release builds; these suites rely on it.
+#undef NDEBUG
 #include <cassert>
 #include <chrono>
 #include <memory>

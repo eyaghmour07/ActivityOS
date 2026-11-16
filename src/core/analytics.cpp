@@ -181,19 +181,21 @@ bool canAttach(const Session& block, UnixMillis next_start) {
 std::vector<Session> mergeProductiveBlocks(const std::vector<Session>& sessions) {
     const auto normalized = normalizedSessions(sessions);
     std::vector<Session> blocks;
+    bool block_open = false;
     for (std::size_t i = 0; i < normalized.size();) {
         const auto& session = normalized[i];
         if (isProductiveSession(session)) {
-            if (blocks.empty() || !canAttach(blocks.back(), session.start_unix_ms)) {
+            if (!block_open || !canAttach(blocks.back(), session.start_unix_ms)) {
                 blocks.push_back(session);
             } else {
                 extendBlockWith(blocks.back(), session, true);
             }
+            block_open = true;
             ++i;
             continue;
         }
 
-        if (!blocks.empty() && isSoftGlance(session) &&
+        if (block_open && isSoftGlance(session) &&
             canAttach(blocks.back(), session.start_unix_ms)) {
             std::int64_t glance_ms = 0;
             std::size_t j = i;
@@ -220,6 +222,9 @@ std::vector<Session> mergeProductiveBlocks(const std::vector<Session>& sessions)
                 continue;
             }
         }
+        // Anything that was not absorbed as a glance ends the block, even if the
+        // next productive session starts within the merge gap.
+        block_open = false;
         ++i;
     }
     return blocks;

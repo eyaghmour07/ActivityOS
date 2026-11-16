@@ -1,5 +1,7 @@
 #include "activityos/analytics.hpp"
 
+// Keep assert() active in Release builds; these suites rely on it.
+#undef NDEBUG
 #include <cassert>
 #include <cmath>
 #include <iostream>
@@ -160,7 +162,11 @@ void testShortGapAndGlancesPreserveFocus() {
         makeSession("vid", "YouTube", "Entertainment", 20 * minute, 90 * 1000, false, true),
         makeSession("v2", "Cursor", "Coding", 20 * minute + 90 * 1000, 20 * minute, true),
     };
-    assert(engine.focusSessions(video, {}).size() == 2);
+    const auto aroundVideo = engine.focusSessions(video, {});
+    assert(aroundVideo.size() == 2);
+    assert(aroundVideo[0].active_duration_ms == 20 * minute);
+    assert(aroundVideo[1].active_duration_ms == 20 * minute);
+    assert(aroundVideo[1].start_unix_ms == 20 * minute + 90 * 1000);
 }
 
 void testSessionStatisticsAndFocus() {
@@ -182,9 +188,22 @@ void testSessionStatisticsAndFocus() {
     assert(near(engine.meanSessionMs(sessions), 18 * minute));
     assert(near(engine.medianSessionMs(sessions), 15 * minute));
     assert(engine.minMaxSessionMs(sessions) == std::make_pair(2 * minute, 40 * minute));
-    assert(engine.focusSessions(sessions, switches).size() == 1);
-    assert(engine.deepWorkSessions(sessions, switches).empty());
     assert(near(engine.contextSwitchesPerHour(sessions, switches), 100.0 / 60.0));
+
+    // The same switches with the one-minute browser session the tracker would
+    // record for them: a quick glance keeps one focus block and one deep-work block.
+    std::vector<Session> withGlance{
+        makeSession("e", "IDE", "Coding", 0, 35 * minute, true),
+        makeSession("f", "Browser", "General", 35 * minute, 1 * minute, false),
+        makeSession("g", "IDE", "Coding", 36 * minute, 34 * minute, true),
+        makeSession("h", "Chat", "Communication", 70 * minute, 2 * minute, false, true),
+    };
+    const auto focus = engine.focusSessions(withGlance, switches);
+    assert(focus.size() == 1);
+    assert(focus[0].active_duration_ms == 69 * minute);
+    const auto deepWork = engine.deepWorkSessions(withGlance, switches);
+    assert(deepWork.size() == 1);
+    assert(deepWork[0].active_duration_ms == 69 * minute);
 }
 
 void testTransitionsDistractionsAndIdle() {

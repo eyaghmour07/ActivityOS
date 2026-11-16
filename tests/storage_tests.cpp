@@ -1,5 +1,7 @@
 #include "activityos/storage.hpp"
 
+// Keep assert() active in Release builds; these suites rely on it.
+#undef NDEBUG
 #include <cassert>
 #include <iostream>
 #include <stdexcept>
