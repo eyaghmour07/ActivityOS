@@ -47,3 +47,48 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
+
+  coverage:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.10.*"
+          cache: true
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev libx11-dev libxss-dev gcovr
+
+      - name: Configure
+        run: cmake -S . -B build-coverage -DCMAKE_BUILD_TYPE=Debug -DACTIVITYOS_COVERAGE=ON
+
+      - name: Build tests
+        run: >
+          cmake --build build-coverage --parallel --target
+          activityos_analytics_tests activityos_storage_tests
+          activityos_activity_source_tests activityos_services_tests
+
+      - name: Test
+        run: ctest --test-dir build-coverage --output-on-failure
+
+      # Reports only; there is no minimum yet.
+      - name: Line coverage
+        run: |
+          mkdir -p coverage
+          gcovr --root . --filter 'src/' --filter 'include/' \
+            --txt coverage/summary.txt --html-details coverage/index.html \
+            --print-summary build-coverage
+          {
+            echo '### Line coverage (Linux build, test suites only)'
+            echo '```'
+            cat coverage/summary.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage
