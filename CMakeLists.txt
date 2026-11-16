@@ -33,8 +33,20 @@ else()
     message(FATAL_ERROR "FindSQLite3 did not provide a supported imported target")
 endif()
 
+include(cmake/EmbedTextFile.cmake)
+set(ACTIVITYOS_DEFAULT_RULES_SOURCE
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/default_classification_rules.cpp")
+activityos_embed_text_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/classification/defaults.rules"
+    "${ACTIVITYOS_DEFAULT_RULES_SOURCE}"
+    activityos::detail
+    defaultClassificationRulesText
+)
+
 add_library(activityos_analytics
     src/core/analytics.cpp
+    src/core/classification.cpp
+    "${ACTIVITYOS_DEFAULT_RULES_SOURCE}"
 )
 target_include_directories(activityos_analytics PUBLIC include)
 

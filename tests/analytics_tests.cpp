@@ -1,4 +1,5 @@
 #include "activityos/analytics.hpp"
+#include "activityos/classification.hpp"
 
 // Keep assert() active in Release builds; these suites rely on it.
 #undef NDEBUG
@@ -6,6 +7,8 @@
 #include <chrono>
 #include <cmath>
 #include <iostream>
+#include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace {
@@ -434,6 +437,88 @@ void testDaylightSavingTransitions() {
     assert(engine.peakProductiveHalfHour(repeatedHour) == 2);
 }
 
+bool rejectsRules(const char* text, const char* expected_in_message) {
+    try {
+        (void)activityos::ClassificationRuleSet::parse(text);
+    } catch (const std::invalid_argument& error) {
+        return std::string(error.what()).find(expected_in_message) != std::string::npos;
+    }
+    return false;
+}
+
+void testClassificationRules() {
+    using activityos::ClassificationRuleSet;
+    using activityos::ClassifierRule;
+    using activityos::NameMatch;
+
+    const auto parsed = ClassificationRuleSet::parse(
+        "# comment\n"
+        "\n"
+        "Coding | - | exact | Nova\r\n"
+        "  Coding|-|words|Visual Studio  \n"
+        "Entertainment | distraction | words | steam\n"
+        "General | browser | words | chrome");
+    assert(parsed.rules().size() == 4);
+    assert(parsed.rules()[0].category == "Coding");
+    assert(parsed.rules()[0].application_match == NameMatch::exact);
+    assert(parsed.rules()[1].application_pattern == "Visual Studio");
+    assert(parsed.rules()[2].is_distraction && !parsed.rules()[2].is_browser);
+    assert(parsed.rules()[3].is_browser && !parsed.rules()[3].is_distraction);
+
+    // exact: the whole name, ignoring case and a trailing ".exe".
+    assert(parsed.firstMatch("Nova") == &parsed.rules()[0]);
+    assert(parsed.firstMatch("nova.exe") == &parsed.rules()[0]);
+    assert(parsed.firstMatch("Nova Launcher") == nullptr);
+    // words: whole consecutive words, never part of a longer word.
+    assert(parsed.firstMatch("Microsoft Visual Studio 2022") == &parsed.rules()[1]);
+    assert(parsed.firstMatch("visual_studio.exe") == &parsed.rules()[1]);
+    assert(parsed.firstMatch("Visual Design Studio") == nullptr);
+    assert(parsed.firstMatch("Steamships") == nullptr);
+    assert(parsed.firstMatch("Steam")->is_distraction);
+    assert(parsed.firstMatch("") == nullptr);
+
+    assert(parsed.isBrowser("Google Chrome"));
+    assert(!parsed.isBrowser("Steam"));
+    assert(!parsed.isBrowser("Chromecast Setup"));
+
+    // contains is what user rules use: anywhere in the name, empty matches all,
+    // and the title pattern must be present too. The first match wins.
+    ClassifierRule video;
+    video.application_pattern = "Chrome";
+    video.title_pattern = "YouTube";
+    video.category = "Entertainment";
+    video.is_distraction = true;
+    ClassifierRule anything;
+    anything.category = "Work";
+    const ClassificationRuleSet user_rules({video, anything});
+    assert(user_rules.firstMatch("Google Chrome", "Lecture - youtube")->category ==
+           "Entertainment");
+    assert(user_rules.firstMatch("Google Chrome", "Inbox")->category == "Work");
+    assert(user_rules.firstMatch("chromedriver.exe", "YouTube")->category == "Entertainment");
+    assert(ClassificationRuleSet().firstMatch("Google Chrome") == nullptr);
+
+    assert(rejectsRules("Coding | - | exact", "line 1"));
+    assert(rejectsRules("# ok\nCoding | - | exact | code | extra", "line 2"));
+    assert(rejectsRules("Coding | - | prefix | code", "unknown match"));
+    assert(rejectsRules("Coding | hidden | exact | code", "unknown flags"));
+    assert(rejectsRules(" | - | exact | code", "category is empty"));
+    assert(rejectsRules("Coding | - | exact | --", "no letters or digits"));
+
+    // The bundled defaults parse and keep their category order.
+    const auto& defaults = ClassificationRuleSet::builtIn();
+    assert(defaults.rules().size() >= 50);
+    assert(defaults.rules().front().category == "Coding");
+    assert(defaults.rules().back().category == "General");
+    for (const auto& rule : defaults.rules()) {
+        assert(rule.application_match != NameMatch::contains);
+        assert(rule.title_pattern.empty());
+        assert(!(rule.is_browser && rule.is_distraction));
+    }
+    assert(defaults.firstMatch("Xcode")->category == "Coding");
+    assert(defaults.firstMatch("Archive Utility") == nullptr);
+    assert(defaults.isBrowser("Safari") && !defaults.isBrowser("Knowledge"));
+}
+
 }  // namespace
 
 int main() {
@@ -446,6 +531,7 @@ int main() {
     testPeakBaselineScoreAndProfile();
     testWeeklyTrendsAndInsights();
     testDaylightSavingTransitions();
+    testClassificationRules();
     std::cout << "All analytics tests passed\n";
     return 0;
 }

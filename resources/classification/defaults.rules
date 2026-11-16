@@ -1,0 +1,85 @@
+# Built-in application classification for ActivityOS.
+#
+# One rule per line:  category | flags | match | application name
+# Rules are read top to bottom and the first one that matches wins. An
+# application that matches nothing is "Other". User rules from Settings are
+# applied afterwards and override these.
+#
+# flags   -            none
+#         distraction  time in this application counts as a potential distraction
+#         browser      classify by the active tab's URL or title when available
+#
+# match   exact  the whole name equals the text. Use this for short or ordinary
+#                words ("arc", "nova"), where a longer name is a different app.
+#         words  the text appears in the name as whole, consecutive words:
+#                "visual studio" matches "Visual Studio Code".
+#
+# Names are compared in lowercase with a trailing ".exe" removed, and words are
+# split on anything that is not a letter or digit ("sublime_text" is two words).
+
+Coding | - | exact | code
+Coding | - | exact | code - insiders
+Coding | - | exact | cursor
+Coding | - | exact | nova
+Coding | - | exact | zed
+Coding | - | exact | zed preview
+Coding | - | words | visual studio code
+Coding | - | words | vscode
+Coding | - | words | xcode
+Coding | - | words | terminal
+Coding | - | words | iterm
+Coding | - | words | iterm2
+Coding | - | words | windowsterminal
+Coding | - | words | visual studio
+Coding | - | words | intellij
+Coding | - | words | clion
+Coding | - | words | clion64
+Coding | - | words | pycharm
+Coding | - | words | pycharm64
+Coding | - | words | android studio
+Coding | - | words | sublime text
+
+Research | - | exact | gemini
+Research | - | exact | poe
+Research | - | words | chatgpt
+Research | - | words | claude
+Research | - | words | google gemini
+Research | - | words | perplexity
+Research | - | words | microsoft copilot
+Research | - | words | github copilot
+
+Communication | - | words | slack
+Communication | - | words | discord
+Communication | - | words | discordptb
+Communication | - | words | discordcanary
+Communication | - | words | teams
+Communication | - | words | msteams
+Communication | - | words | zoom
+Communication | - | words | mail
+Communication | - | words | airmail
+Communication | - | words | fastmail
+Communication | - | words | gmail
+Communication | - | words | mailmate
+Communication | - | words | mailspring
+Communication | - | words | messages
+
+Entertainment | distraction | words | youtube
+Entertainment | distraction | words | netflix
+Entertainment | distraction | words | spotify
+Entertainment | distraction | words | steam
+Entertainment | distraction | words | steamwebhelper
+Entertainment | distraction | words | twitch
+
+Planning | - | words | notion
+Planning | - | words | obsidian
+Planning | - | words | todoist
+Planning | - | words | calendar
+
+General | browser | exact | edge
+General | browser | exact | arc
+General | browser | words | chrome
+General | browser | words | safari
+General | browser | words | firefox
+General | browser | words | microsoft edge
+General | browser | words | msedge
+General | browser | words | arc browser

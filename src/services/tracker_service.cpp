@@ -1,5 +1,7 @@
 #include "activityos/services.hpp"
 
+#include "activityos/classification.hpp"
+
 #include <algorithm>
 #include <chrono>
 #include <cctype>
@@ -15,10 +17,6 @@ std::string lower(std::string value) {
         return static_cast<char>(std::tolower(c));
     });
     return value;
-}
-
-bool containsInsensitive(const std::string& value, const std::string& pattern) {
-    return pattern.empty() || lower(value).find(lower(pattern)) != std::string::npos;
 }
 
 bool isNonUserSystemApplication(const std::string& application) {
@@ -77,92 +75,9 @@ void seedIgnoredSystemExclusions(storage::Database& database) {
     }
 }
 
-// An application name prepared for default classification. Keywords never match
-// inside a longer word, so "arc" does not match "Archive Utility".
-struct ApplicationName {
-    std::string normalized;         // lowercase, without a trailing ".exe"
-    std::vector<std::string> words; // normalized, split on non-alphanumeric characters
-};
-
-std::vector<std::string> splitWords(const std::string& value) {
-    std::vector<std::string> words;
-    std::string current;
-    for (const unsigned char c : value) {
-        // Bytes of multi-byte UTF-8 characters stay inside the word.
-        if (c >= 0x80 || std::isalnum(c)) {
-            current += static_cast<char>(c);
-        } else if (!current.empty()) {
-            words.push_back(std::move(current));
-            current.clear();
-        }
-    }
-    if (!current.empty()) words.push_back(std::move(current));
-    return words;
-}
-
-ApplicationName parseApplicationName(const std::string& application) {
-    ApplicationName name;
-    name.normalized = lower(application);
-    if (name.normalized.size() > 4 && name.normalized.ends_with(".exe")) {
-        name.normalized.resize(name.normalized.size() - 4);
-    }
-    name.words = splitWords(name.normalized);
-    return name;
-}
-
-// True when the whole name equals one of `names`. Used for keywords that are
-// short or ordinary words ("arc", "nova"), where any longer name is another app.
-bool isNamed(const ApplicationName& name, std::initializer_list<const char*> names) {
-    return std::any_of(names.begin(), names.end(), [&](const char* candidate) {
-        return name.normalized == candidate;
-    });
-}
-
-// True when the words of one of `phrases` appear in the name as whole,
-// consecutive words: "visual studio" matches "Visual Studio Code".
-bool hasWords(const ApplicationName& name, std::initializer_list<const char*> phrases) {
-    return std::any_of(phrases.begin(), phrases.end(), [&](const char* phrase) {
-        const auto wanted = splitWords(phrase);
-        return !wanted.empty() &&
-               std::search(name.words.begin(), name.words.end(), wanted.begin(),
-                           wanted.end()) != name.words.end();
-    });
-}
-
-bool isBrowserName(const ApplicationName& name) {
-    return isNamed(name, {"edge", "arc"}) ||
-           hasWords(name, {"chrome", "safari", "firefox", "microsoft edge", "msedge",
-                           "arc browser"});
-}
-
 std::pair<std::string, bool> defaultClassification(const std::string& application) {
-    const auto name = parseApplicationName(application);
-    if (isNamed(name, {"code", "code - insiders", "cursor", "nova", "zed", "zed preview"}) ||
-        hasWords(name, {"visual studio code", "vscode", "xcode", "terminal", "iterm",
-                        "iterm2", "windowsterminal", "visual studio", "intellij", "clion",
-                        "clion64", "pycharm", "pycharm64", "android studio",
-                        "sublime text"})) {
-        return {"Coding", false};
-    }
-    if (isNamed(name, {"gemini", "poe"}) ||
-        hasWords(name, {"chatgpt", "claude", "google gemini", "perplexity",
-                        "microsoft copilot", "github copilot"})) {
-        return {"Research", false};
-    }
-    if (hasWords(name, {"slack", "discord", "discordptb", "discordcanary", "teams",
-                        "msteams", "zoom", "mail", "airmail", "fastmail", "gmail",
-                        "mailmate", "mailspring", "messages"})) {
-        return {"Communication", false};
-    }
-    if (hasWords(name, {"youtube", "netflix", "spotify", "steam", "steamwebhelper",
-                        "twitch"})) {
-        return {"Entertainment", true};
-    }
-    if (hasWords(name, {"notion", "obsidian", "todoist", "calendar"})) {
-        return {"Planning", false};
-    }
-    if (isBrowserName(name)) {
-        return {"General", false};
+    if (const auto* rule = ClassificationRuleSet::builtIn().firstMatch(application)) {
+        return {rule->category, rule->is_distraction};
     }
     return {"Other", false};
 }
@@ -197,7 +112,7 @@ bool hostMatches(const std::string& host, std::initializer_list<const char*> dom
 }
 
 bool isBrowserApplication(const std::string& application) {
-    return isBrowserName(parseApplicationName(application));
+    return ClassificationRuleSet::builtIn().isBrowser(application);
 }
 
 std::optional<std::pair<std::string, bool>> browserUrlClassification(
@@ -329,15 +244,23 @@ storage::Application TrackerService::classify(const ActivitySnapshot& snapshot,
     std::stable_sort(rules.begin(), rules.end(), [](const auto& left, const auto& right) {
         return left.priority > right.priority;
     });
-    const std::string title = snapshot.window_title.value_or("");
+    // User rules go through the same matcher as the built-in defaults.
+    std::vector<ClassifierRule> userRules;
     for (const auto& rule : rules) {
-        if (rule.enabled &&
-            containsInsensitive(snapshot.application_name, rule.application_pattern) &&
-            containsInsensitive(title, rule.title_pattern)) {
-            category = rule.category;
-            distraction = rule.is_distraction;
-            break;
-        }
+        if (!rule.enabled) continue;
+        ClassifierRule userRule;
+        userRule.application_pattern = rule.application_pattern;
+        userRule.application_match = NameMatch::contains;
+        userRule.title_pattern = rule.title_pattern;
+        userRule.category = rule.category;
+        userRule.is_distraction = rule.is_distraction;
+        userRules.push_back(std::move(userRule));
+    }
+    const ClassificationRuleSet userRuleSet(std::move(userRules));
+    if (const auto* rule = userRuleSet.firstMatch(snapshot.application_name,
+                                                  snapshot.window_title.value_or(""))) {
+        category = rule->category;
+        distraction = rule->is_distraction;
     }
 
     storage::Application application;
