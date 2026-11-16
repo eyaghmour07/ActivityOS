@@ -80,6 +80,5 @@ private:
 };
 
 QWidget* makeRecordingIndicator(QLabel*& statusLabel);
-QWidget* makePageColumn(QVBoxLayout*& layout, int maxWidth = 0);
 
 } // namespace activityos::ui
