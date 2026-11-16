@@ -190,6 +190,108 @@ int main() {
     check(!loginSession, "loginwindow does not create active sessions");
     check(chromeSession, "real apps still create sessions after unlock");
 
+    // Default classification matches whole names or whole words, never a
+    // substring of a longer word. The first block lists real applications that
+    // substring matching used to put in the wrong category.
+    struct ClassificationCase {
+        const char* application;
+        const char* category;
+        bool distraction{false};
+        std::optional<std::string> title{};
+    };
+    const std::vector<ClassificationCase> classificationCases{
+        {"Archive Utility", "Other"},
+        {"The Unarchiver", "Other"},
+        {"ArcGIS Pro", "Other"},
+        {"Search", "Other"},
+        {"Knowledge", "Other"},
+        {"Zedge", "Other"},
+        {"Poedit", "Other"},
+        {"Novabench", "Other"},
+        {"Nova Launcher", "Other"},
+        {"Gemini 2: The Duplicate Finder", "Other"},
+        {"ZoomIt64.exe", "Other"},
+        {"Cursor Pro", "Other"},
+        // A name that merely contains "edge" is not a browser, so its window
+        // title must not be used for classification.
+        {"Knowledge Base", "Other", false, "Lecture 4 - YouTube"},
+
+        {"Code", "Coding"},
+        {"Code.exe", "Coding"},
+        {"Visual Studio Code", "Coding"},
+        {"Cursor", "Coding"},
+        {"Xcode", "Coding"},
+        {"Terminal", "Coding"},
+        {"iTerm2", "Coding"},
+        {"WindowsTerminal.exe", "Coding"},
+        {"gnome-terminal-server", "Coding"},
+        {"IntelliJ IDEA", "Coding"},
+        {"PyCharm CE", "Coding"},
+        {"pycharm64.exe", "Coding"},
+        {"CLion", "Coding"},
+        {"Android Studio", "Coding"},
+        {"Sublime Text", "Coding"},
+        {"sublime_text.exe", "Coding"},
+        {"Nova", "Coding"},
+        {"Zed", "Coding"},
+
+        {"ChatGPT", "Research"},
+        {"Claude", "Research"},
+        {"Gemini", "Research"},
+        {"Perplexity", "Research"},
+        {"Poe", "Research"},
+        {"GitHub Copilot", "Research"},
+
+        {"Slack", "Communication"},
+        {"Discord", "Communication"},
+        {"Microsoft Teams", "Communication"},
+        {"zoom.us", "Communication"},
+        {"Mail", "Communication"},
+        {"Airmail", "Communication"},
+        {"Messages", "Communication"},
+
+        {"Spotify", "Entertainment", true},
+        {"Steam", "Entertainment", true},
+        {"steamwebhelper.exe", "Entertainment", true},
+        {"Netflix", "Entertainment", true},
+
+        {"Notion", "Planning"},
+        {"Obsidian", "Planning"},
+        {"Todoist", "Planning"},
+        {"Calendar", "Planning"},
+
+        {"Google Chrome", "General"},
+        {"chrome.exe", "General"},
+        {"Safari", "General"},
+        {"Firefox", "General"},
+        {"Microsoft Edge", "General"},
+        {"msedge.exe", "General"},
+        {"Arc", "General"},
+        // Real browsers still get title-based classification.
+        {"Microsoft Edge Beta", "Entertainment", true, "Lecture 4 - YouTube"},
+    };
+    storage::Database classificationDatabase = storage::Database::inMemory();
+    classificationDatabase.migrate();
+    std::vector<ActivitySnapshot> classificationSnapshots;
+    for (const auto& item : classificationCases) {
+        classificationSnapshots.push_back(snapshot(item.application, 0, item.title));
+    }
+    TrackerService classificationTracker(
+        classificationDatabase,
+        std::make_unique<FakeActivitySource>(std::move(classificationSnapshots)));
+    for (std::size_t i = 0; i < classificationCases.size(); ++i) {
+        classificationTracker.poll(start + static_cast<std::int64_t>(i) * 5 * 1000);
+    }
+    for (const auto& item : classificationCases) {
+        const auto stored = classificationDatabase.applicationByName(item.application);
+        const std::string message = std::string("default classification of \"") +
+                                    item.application + "\" is " + item.category +
+                                    (stored ? ", got " + stored->category : ", got nothing");
+        check(stored && stored->category == item.category &&
+                  stored->is_distraction == item.distraction,
+              message.c_str());
+    }
+
     if (failures == 0) {
         std::cout << "All service tests passed.\n";
         return 0;
