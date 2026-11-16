@@ -48,6 +48,8 @@ ActivityOS deliberately uses “potential distraction” and does not claim that
 - **Peak period:** The half-hour bucket containing the most productive activity.
 - **Weekly trend:** Comparable seven-day aggregates ordered chronologically.
 
+Days and half-hour buckets follow local wall-clock time. The UTC offset is looked up for each timestamp, so a day runs from one local midnight to the next and is 23 or 25 hours long when daylight-saving time starts or ends.
+
 Empty days and unavailable denominators produce zero values rather than undefined or infinite output.
 
 ## Productivity score

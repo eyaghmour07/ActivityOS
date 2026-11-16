@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <string>
 #include <utility>
@@ -33,7 +34,11 @@ struct IdlePeriod {
 };
 
 struct AnalyticsConfig {
+    // Local time minus UTC, in minutes. `utc_offset_minutes_at`, when set, gives
+    // the offset in effect at a specific moment, so results stay correct across
+    // daylight-saving changes; otherwise the fixed `timezone_offset_minutes` applies.
     int timezone_offset_minutes = 0;
+    std::function<int(UnixMillis)> utc_offset_minutes_at;
     std::int64_t focus_threshold_ms = 20 * 60 * 1000;
     std::int64_t deep_work_threshold_ms = 30 * 60 * 1000;
     std::int64_t sustained_recovery_ms = 20 * 60 * 1000;
@@ -147,6 +152,11 @@ public:
     explicit AnalyticsEngine(AnalyticsConfig config = {});
 
     const AnalyticsConfig& config() const noexcept;
+
+    int utcOffsetMinutesAt(UnixMillis timestamp_unix_ms) const;
+    // The same local wall-clock time `days` calendar days away. A local midnight
+    // maps to another local midnight even when a day is 23 or 25 hours long.
+    UnixMillis addLocalDays(UnixMillis timestamp_unix_ms, int days) const;
 
     std::vector<CategoryMetrics> timeDistribution(
         const std::vector<Session>& sessions) const;

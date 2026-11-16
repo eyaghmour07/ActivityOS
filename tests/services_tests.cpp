@@ -1,5 +1,6 @@
 #include "activityos/services.hpp"
 
+#include <chrono>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -28,6 +29,23 @@ activityos::ActivitySnapshot snapshot(
     value.metadata.status = activityos::ActivitySourceStatus::available;
     value.metadata.capabilities = {true, true, true, true};
     return value;
+}
+
+// Milliseconds since the Unix epoch for a UTC date and time.
+std::int64_t utcMs(int year, unsigned month, unsigned day, int hours, int minutes = 0) {
+    using namespace std::chrono;
+    const sys_days date{std::chrono::year{year} / std::chrono::month{month} /
+                        std::chrono::day{day}};
+    return duration_cast<milliseconds>(date.time_since_epoch()).count() +
+           (hours * 60LL + minutes) * 60 * 1000;
+}
+
+// US Central time in 2026: UTC-6, and UTC-5 between 8 March 02:00 CST
+// (08:00 UTC) and 1 November 02:00 CDT (07:00 UTC).
+int usCentral2026OffsetMinutes(activityos::UnixMillis timestamp) {
+    const bool daylight =
+        timestamp >= utcMs(2026, 3, 8, 8) && timestamp < utcMs(2026, 11, 1, 7);
+    return daylight ? -5 * 60 : -6 * 60;
 }
 
 } // namespace
@@ -291,6 +309,56 @@ int main() {
                   stored->is_distraction == item.distraction,
               message.c_str());
     }
+
+    // Daily history steps by local calendar day, so sessions next to midnight
+    // stay in the right day when a daylight-saving change makes a day 23 or 25
+    // hours long.
+    storage::Database dstDatabase = storage::Database::inMemory();
+    dstDatabase.migrate();
+    storage::Application editor;
+    editor.name = "Xcode";
+    editor.category = "Coding";
+    editor.created_at = 1;
+    const auto editorId = dstDatabase.upsertApplication(editor);
+    const auto addCodingSession = [&](std::int64_t sessionStart, std::int64_t durationMs) {
+        dstDatabase.addSession({0, editorId, "Coding", sessionStart,
+                                sessionStart + durationMs, durationMs, 0, 0, false, false});
+    };
+    constexpr std::int64_t kMinuteMs = 60 * 1000;
+    // 00:10 CDT on 9 March, the day after the 23-hour day.
+    addCodingSession(utcMs(2026, 3, 9, 5, 10), 20 * kMinuteMs);
+    // 23:30 CST on 1 November, the last half hour of the 25-hour day.
+    addCodingSession(utcMs(2026, 11, 2, 5, 30), 15 * kMinuteMs);
+
+    AnalyticsConfig centralConfig;
+    centralConfig.utc_offset_minutes_at = usCentral2026OffsetMinutes;
+    ActivityService centralActivity(dstDatabase, centralConfig);
+
+    const auto springDays =
+        centralActivity.dailyHistory({utcMs(2026, 3, 7, 6), utcMs(2026, 3, 10, 5)});
+    check(springDays.size() == 3 &&
+              springDays[0].day_start_unix_ms == utcMs(2026, 3, 7, 6) &&
+              springDays[1].day_start_unix_ms == utcMs(2026, 3, 8, 6) &&
+              springDays[2].day_start_unix_ms == utcMs(2026, 3, 9, 5),
+          "daily history starts each day at local midnight across spring forward");
+    check(springDays.size() == 3 && springDays[1].active_ms == 0 &&
+              springDays[2].active_ms == 20 * kMinuteMs,
+          "a session just after midnight on 9 March is not counted on 8 March");
+
+    const auto fallDays =
+        centralActivity.dailyHistory({utcMs(2026, 10, 31, 5), utcMs(2026, 11, 3, 6)});
+    check(fallDays.size() == 3 &&
+              fallDays[0].day_start_unix_ms == utcMs(2026, 10, 31, 5) &&
+              fallDays[1].day_start_unix_ms == utcMs(2026, 11, 1, 5) &&
+              fallDays[2].day_start_unix_ms == utcMs(2026, 11, 2, 6),
+          "daily history starts each day at local midnight across fall back");
+    check(fallDays.size() == 3 && fallDays[1].active_ms == 15 * kMinuteMs &&
+              fallDays[2].active_ms == 0,
+          "a session late on 1 November is not counted on 2 November");
+
+    ActivityService fixedOffsetActivity(dstDatabase);
+    check(fixedOffsetActivity.dailyHistory({0, 3 * 24 * 60 * kMinuteMs}).size() == 3,
+          "daily history keeps 24-hour days with a fixed offset");
 
     if (failures == 0) {
         std::cout << "All service tests passed.\n";

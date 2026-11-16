@@ -199,10 +199,17 @@ std::int64_t localDayStart(int daysAgo = 0) {
         .toMSecsSinceEpoch();
 }
 
+std::int64_t localDayEnd() {
+    return localDayStart(-1);
+}
+
 AnalyticsConfig localAnalyticsConfig() {
     AnalyticsConfig config;
-    config.timezone_offset_minutes =
-        QDateTime::currentDateTime().offsetFromUtc() / 60;
+    // Looked up per timestamp, so a daylight-saving change while the app is
+    // running is picked up without a restart.
+    config.utc_offset_minutes_at = [](UnixMillis unixMs) {
+        return QDateTime::fromMSecsSinceEpoch(unixMs).offsetFromUtc() / 60;
+    };
     return config;
 }
 
@@ -1333,8 +1340,7 @@ void MainWindow::buildTray() {
 }
 
 storage::DateRange MainWindow::todayRange() const {
-    const auto start = localDayStart();
-    return {start, start + kDayMs};
+    return {localDayStart(), localDayEnd()};
 }
 
 void MainWindow::refreshTracker() {
@@ -1558,7 +1564,7 @@ void MainWindow::refreshApps() {
 }
 
 void MainWindow::refreshTrends(const DashboardSnapshot& snapshot) {
-    const storage::DateRange weekRange{localDayStart(6), localDayStart() + kDayMs};
+    const storage::DateRange weekRange{localDayStart(6), localDayEnd()};
     const auto days = activity_.dailyHistory(weekRange);
     double totalFocus = 0;
     int bestIndex = -1;
@@ -1620,7 +1626,7 @@ void MainWindow::refreshTrends(const DashboardSnapshot& snapshot) {
             : 0;
     workstyleDeepRatio_->setText(QString("%1%").arg(deepRatio));
 
-    const storage::DateRange historyRange{localDayStart(13), localDayStart() + kDayMs};
+    const storage::DateRange historyRange{localDayStart(13), localDayEnd()};
     const auto history = activity_.dailyHistory(historyRange);
     historyTable_->setRowCount(static_cast<int>(history.size()));
     for (int row = 0; row < historyTable_->rowCount(); ++row) {
@@ -1642,7 +1648,7 @@ void MainWindow::refreshGoals() {
         delete item;
     }
 
-    const storage::DateRange range{localDayStart(6), localDayStart() + kDayMs};
+    const storage::DateRange range{localDayStart(6), localDayEnd()};
     const auto goals = activity_.goalProgress(range);
     goalsTable_->setRowCount(static_cast<int>(goals.size()));
     for (int row = 0; row < goalsTable_->rowCount(); ++row) {

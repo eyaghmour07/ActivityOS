@@ -9,8 +9,6 @@
 namespace activityos {
 namespace {
 
-constexpr std::int64_t kDayMs = 24LL * 60 * 60 * 1000;
-
 bool isProductiveCategory(const std::string& category) {
     return category == "Coding" || category == "Research" ||
            category == "Planning" || category == "Administration" ||
@@ -114,7 +112,8 @@ DashboardSnapshot ActivityService::dashboard(storage::DateRange range,
     snapshot.metrics =
         analytics_.dailyMetrics(day_start_ms, daySessions, daySwitches, dayIdle);
 
-    const storage::DateRange historyRange{day_start_ms - 14 * kDayMs, day_start_ms};
+    const storage::DateRange historyRange{analytics_.addLocalDays(day_start_ms, -14),
+                                          day_start_ms};
     const auto history = dailyHistory(historyRange);
     snapshot.baseline = analytics_.baseline14Day(history, day_start_ms);
     snapshot.score = analytics_.productivityScore(snapshot.metrics);
@@ -133,10 +132,14 @@ DashboardSnapshot ActivityService::dashboard(storage::DateRange range,
 std::vector<DailyMetrics> ActivityService::dailyHistory(storage::DateRange range) const {
     std::vector<DailyMetrics> result;
     if (range.end <= range.start) return result;
-    for (auto start = range.start; start < range.end; start += kDayMs) {
-        const storage::DateRange day{start, std::min(start + kDayMs, range.end)};
+    for (auto start = range.start; start < range.end;) {
+        // Step by calendar day: a local day is 23 or 25 hours long when the
+        // UTC offset changes.
+        const auto next = std::max(start + 1, analytics_.addLocalDays(start, 1));
+        const storage::DateRange day{start, std::min(next, range.end)};
         result.push_back(analytics_.dailyMetrics(start, sessions(day), switches(day),
                                                  idlePeriods(day)));
+        start = next;
     }
     return result;
 }

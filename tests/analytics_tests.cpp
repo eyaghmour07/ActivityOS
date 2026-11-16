@@ -3,6 +3,7 @@
 // Keep assert() active in Release builds; these suites rely on it.
 #undef NDEBUG
 #include <cassert>
+#include <chrono>
 #include <cmath>
 #include <iostream>
 #include <vector>
@@ -342,6 +343,97 @@ void testWeeklyTrendsAndInsights() {
     assert(insights[0].code == "focus_above_baseline");
 }
 
+// Milliseconds since the Unix epoch for a UTC date and time.
+std::int64_t utcMs(int year, unsigned month, unsigned day_of_month, int hours,
+                   int minutes = 0) {
+    using namespace std::chrono;
+    const sys_days date{std::chrono::year{year} / std::chrono::month{month} /
+                        std::chrono::day{day_of_month}};
+    return duration_cast<milliseconds>(date.time_since_epoch()).count() + hours * hour +
+           minutes * minute;
+}
+
+// US Central time in 2026: UTC-6, and UTC-5 between 8 March 02:00 CST
+// (08:00 UTC) and 1 November 02:00 CDT (07:00 UTC).
+int usCentral2026OffsetMinutes(activityos::UnixMillis timestamp) {
+    const bool daylight =
+        timestamp >= utcMs(2026, 3, 8, 8) && timestamp < utcMs(2026, 11, 1, 7);
+    return daylight ? -5 * 60 : -6 * 60;
+}
+
+void testDaylightSavingTransitions() {
+    AnalyticsConfig config;
+    config.utc_offset_minutes_at = usCentral2026OffsetMinutes;
+    AnalyticsEngine engine(config);
+
+    // Local midnights, written in UTC.
+    const auto mar7 = utcMs(2026, 3, 7, 6);
+    const auto mar8 = utcMs(2026, 3, 8, 6);
+    const auto mar9 = utcMs(2026, 3, 9, 5);
+    const auto oct31 = utcMs(2026, 10, 31, 5);
+    const auto nov1 = utcMs(2026, 11, 1, 5);
+    const auto nov2 = utcMs(2026, 11, 2, 6);
+
+    assert(engine.utcOffsetMinutesAt(mar8) == -360);
+    assert(engine.utcOffsetMinutesAt(mar9) == -300);
+    assert(engine.utcOffsetMinutesAt(nov1) == -300);
+    assert(engine.utcOffsetMinutesAt(nov2) == -360);
+
+    // Spring forward: 8 March is 23 hours long.
+    assert(engine.addLocalDays(mar7, 1) == mar8);
+    assert(engine.addLocalDays(mar8, 1) == mar9);
+    assert(mar9 - mar8 == 23 * hour);
+    assert(engine.addLocalDays(mar9, -1) == mar8);
+    assert(engine.addLocalDays(mar9, -2) == mar7);
+
+    // Fall back: 1 November is 25 hours long.
+    assert(engine.addLocalDays(oct31, 1) == nov1);
+    assert(engine.addLocalDays(nov1, 1) == nov2);
+    assert(nov2 - nov1 == 25 * hour);
+    assert(engine.addLocalDays(nov2, -1) == nov1);
+    assert(engine.addLocalDays(nov2, -2) == oct31);
+
+    // A 14-day baseline window that crosses a transition still starts at a
+    // local midnight.
+    assert(engine.addLocalDays(utcMs(2026, 3, 15, 5), -14) == utcMs(2026, 3, 1, 6));
+    assert(engine.addLocalDays(utcMs(2026, 11, 10, 6), -14) == utcMs(2026, 10, 27, 5));
+
+    // Without a per-timestamp offset, days stay 24 hours long.
+    assert(AnalyticsEngine().addLocalDays(mar8, 1) == mar8 + day);
+
+    // 09:00 local is half-hour 18 on both sides of each transition.
+    const auto nineAm = [](std::int64_t local_midnight) {
+        return std::vector<Session>{makeSession("work", "IDE", "Coding",
+                                                local_midnight + 9 * hour, 30 * minute,
+                                                true)};
+    };
+    assert(engine.peakProductiveHalfHour(nineAm(mar7)) == 18);
+    assert(engine.peakProductiveHalfHour(nineAm(mar9)) == 18);
+    assert(engine.peakProductiveHalfHour(nineAm(oct31)) == 18);
+    assert(engine.peakProductiveHalfHour(nineAm(nov2)) == 18);
+
+    // An offset captured before the change puts the same session an hour off.
+    AnalyticsConfig stale_config;
+    stale_config.timezone_offset_minutes = -360;
+    assert(AnalyticsEngine(stale_config).peakProductiveHalfHour(nineAm(mar9)) == 16);
+
+    // Work that spans the spring change lands in the wall-clock buckets it was
+    // done in: 01:30-02:00 CST, then 03:00-03:30 CDT. 02:00-03:00 does not exist.
+    std::vector<Session> acrossSpring{
+        makeSession("late", "IDE", "Coding", utcMs(2026, 3, 8, 7, 30), hour, true)};
+    assert(engine.peakProductiveHalfHour(acrossSpring) == 3);
+    std::vector<Session> afterSpring{
+        makeSession("late", "IDE", "Coding", utcMs(2026, 3, 8, 8), 30 * minute, true)};
+    assert(engine.peakProductiveHalfHour(afterSpring) == 6);
+
+    // The repeated 01:00 hour on 1 November counts twice in the same buckets.
+    std::vector<Session> repeatedHour{
+        makeSession("first", "IDE", "Coding", utcMs(2026, 11, 1, 6), 30 * minute, true),
+        makeSession("second", "IDE", "Coding", utcMs(2026, 11, 1, 7), 30 * minute, true),
+        makeSession("other", "IDE", "Coding", utcMs(2026, 11, 1, 15), 45 * minute, true)};
+    assert(engine.peakProductiveHalfHour(repeatedHour) == 2);
+}
+
 }  // namespace
 
 int main() {
@@ -353,6 +445,7 @@ int main() {
     testTransitionsDistractionsAndIdle();
     testPeakBaselineScoreAndProfile();
     testWeeklyTrendsAndInsights();
+    testDaylightSavingTransitions();
     std::cout << "All analytics tests passed\n";
     return 0;
 }

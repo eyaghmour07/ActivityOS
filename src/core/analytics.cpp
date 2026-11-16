@@ -286,6 +286,20 @@ const AnalyticsConfig& AnalyticsEngine::config() const noexcept {
     return config_;
 }
 
+int AnalyticsEngine::utcOffsetMinutesAt(UnixMillis timestamp_unix_ms) const {
+    if (!config_.utc_offset_minutes_at) {
+        return config_.timezone_offset_minutes;
+    }
+    return std::clamp(config_.utc_offset_minutes_at(timestamp_unix_ms), -24 * 60, 24 * 60);
+}
+
+UnixMillis AnalyticsEngine::addLocalDays(UnixMillis timestamp_unix_ms, int days) const {
+    const auto shifted = timestamp_unix_ms + static_cast<std::int64_t>(days) * kDayMs;
+    const auto offset_change_minutes =
+        utcOffsetMinutesAt(shifted) - utcOffsetMinutesAt(timestamp_unix_ms);
+    return shifted - static_cast<std::int64_t>(offset_change_minutes) * 60 * 1000;
+}
+
 std::vector<CategoryMetrics> AnalyticsEngine::timeDistribution(
     const std::vector<Session>& sessions) const {
     struct Accumulator {
@@ -623,9 +637,9 @@ int AnalyticsEngine::peakProductiveHalfHour(
             continue;
         }
         auto cursor = session.start_unix_ms;
-        const auto offset_ms =
-            static_cast<std::int64_t>(config_.timezone_offset_minutes) * 60 * 1000;
         while (cursor < session.end_unix_ms) {
+            const auto offset_ms =
+                static_cast<std::int64_t>(utcOffsetMinutesAt(cursor)) * 60 * 1000;
             const auto local_cursor = cursor + offset_ms;
             const auto local_day_start = floorPeriod(local_cursor, kDayMs);
             const auto slot =
