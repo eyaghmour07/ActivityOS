@@ -406,25 +406,4 @@ QWidget* makeRecordingIndicator(QLabel*& statusLabel) {
     return row;
 }
 
-QWidget* makePageColumn(QVBoxLayout*& layout, int maxWidth) {
-    auto* scroll = new QScrollArea;
-    scroll->setWidgetResizable(true);
-    scroll->setFrameShape(QFrame::NoFrame);
-    scroll->setObjectName("pageScroll");
-    scroll->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-
-    auto* inner = new QWidget;
-    inner->setObjectName("pageContent");
-    inner->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
-    if (maxWidth > 0) inner->setMaximumWidth(maxWidth);
-    layout = new QVBoxLayout(inner);
-    layout->setContentsMargins(36, 28, 36, 28);
-    layout->setSpacing(22);
-
-    scroll->setWidget(inner);
-    return scroll;
-}
-
 } // namespace activityos::ui

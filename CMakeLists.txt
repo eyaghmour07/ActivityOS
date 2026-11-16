@@ -110,8 +110,28 @@ target_link_libraries(activityos_services
 
 qt_add_executable(ActivityOS
     src/app/main.cpp
+    src/app/apps_page.cpp
+    src/app/apps_page.hpp
+    src/app/dashboard_page.cpp
+    src/app/dashboard_page.hpp
+    src/app/demo_data.cpp
+    src/app/demo_data.hpp
+    src/app/focus_page.cpp
+    src/app/focus_page.hpp
+    src/app/goals_page.cpp
+    src/app/goals_page.hpp
     src/app/main_window.cpp
     src/app/main_window.hpp
+    src/app/settings_page.cpp
+    src/app/settings_page.hpp
+    src/app/style.cpp
+    src/app/style.hpp
+    src/app/today_page.cpp
+    src/app/today_page.hpp
+    src/app/trends_page.cpp
+    src/app/trends_page.hpp
+    src/app/ui_helpers.cpp
+    src/app/ui_helpers.hpp
     src/app/ui_widgets.cpp
     src/app/ui_widgets.hpp
     resources/activityos.qrc
