@@ -13,6 +13,7 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
 option(ACTIVITYOS_BUILD_TESTS "Build ActivityOS tests" ON)
+option(ACTIVITYOS_COVERAGE "Instrument the build for a line-coverage report (GCC or Clang)" OFF)
 
 if(APPLE)
     if(EXISTS "/opt/homebrew/opt/qt")
@@ -31,6 +32,15 @@ elseif(TARGET SQLite::SQLite3)
     set(ACTIVITYOS_SQLITE_TARGET SQLite::SQLite3)
 else()
     message(FATAL_ERROR "FindSQLite3 did not provide a supported imported target")
+endif()
+
+if(ACTIVITYOS_COVERAGE)
+    if(MSVC)
+        message(FATAL_ERROR "ACTIVITYOS_COVERAGE needs GCC or Clang")
+    endif()
+    # Applies to every target defined below. Read the results with gcovr.
+    add_compile_options(--coverage -O0 -g)
+    add_link_options(--coverage)
 endif()
 
 include(cmake/EmbedTextFile.cmake)

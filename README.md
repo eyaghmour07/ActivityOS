@@ -88,7 +88,7 @@ cmake --build --preset default
 ctest --preset default
 ```
 
-CI runs the same four suites (**analytics**, **storage**, **activity source**, **services**) on macOS, Ubuntu, and Windows. There is no line-coverage gate yet; the suites cover classification (including VS Code / Chrome / lock-screen), sessionization, migrations, and dashboard aggregation.
+CI runs the same four suites (**analytics**, **storage**, **activity source**, **services**) on macOS, Ubuntu, and Windows. A separate `coverage` job reports line coverage for the Linux build in its run summary, with no minimum enforced yet; the suites cover classification (including VS Code / Chrome / lock-screen), sessionization, migrations, and dashboard aggregation.
 
 ### Ubuntu/Debian
 
@@ -135,7 +135,7 @@ Native OS adapter
 
 - **Signed, notarized macOS install** so friends can skip building Qt. Gatekeeper is the real distribution blocker, not missing features.
 - **Wayland** needs a compositor-specific path (or an honest “unsupported” forever). Silent fake data would be worse.
-- **Line-coverage + fuzz on the sessionizer** so merge/idle edge cases stay pinned.
+- **Fuzz the sessionizer** so merge/idle edge cases stay pinned.
 - **Windows installer polish** to match the macOS script.
 
 Known limitations today: Linux/Wayland collection is incomplete; DMG/ZIP downloads are not a supported install path; scores are heuristics, not a measure of job performance.
