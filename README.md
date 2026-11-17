@@ -128,7 +128,9 @@ Native OS adapter
 - [`include/activityos/activity_source.hpp`](include/activityos/activity_source.hpp) — native tracking contract
 - [`include/activityos/storage.hpp`](include/activityos/storage.hpp) — SQLite + privacy ops
 - [`include/activityos/analytics.hpp`](include/activityos/analytics.hpp) — workstyle metrics
+- [`include/activityos/classification.hpp`](include/activityos/classification.hpp) — app classification rules; built-in defaults are plain text in [`resources/classification/defaults.rules`](resources/classification/defaults.rules)
 - [`include/activityos/services.hpp`](include/activityos/services.hpp) — orchestration
+- [`resources/migrations`](resources/migrations) — the database schema, applied in order at startup
 - [`src/app`](src/app) — dashboard, tray, settings, goals
 
 ## What I'd do next
